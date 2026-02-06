@@ -425,6 +425,13 @@ class TestErrorWrapping:
         assert result.is_error is True
         assert "cannot transition" in result.content[0].text.lower()
 
+    async def test_task_list_wraps_nonexistent_team(self, client: Client):
+        result = await client.call_tool(
+            "task_list", {"team_name": "ghost-team"}, raise_on_error=False,
+        )
+        assert result.is_error is True
+        assert "does not exist" in result.content[0].text.lower()
+
 
 class TestPollInbox:
     async def test_should_return_empty_on_timeout(self, client: Client):

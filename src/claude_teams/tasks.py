@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+from collections import deque
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -30,13 +31,34 @@ def _tasks_dir(base_dir: Path | None = None) -> Path:
 _STATUS_ORDER = {"pending": 0, "in_progress": 1, "completed": 2}
 
 
-def _sync_dependency(team_dir: Path, target_id: str, field: str, value: str) -> None:
-    fpath = team_dir / f"{target_id}.json"
-    other = TaskFile(**json.loads(fpath.read_text()))
-    lst = getattr(other, field)
-    if value not in lst:
-        lst.append(value)
-        fpath.write_text(json.dumps(other.model_dump(by_alias=True, exclude_none=True)))
+def _flush_pending_writes(pending_writes: dict[Path, TaskFile]) -> None:
+    for path, task_obj in pending_writes.items():
+        path.write_text(json.dumps(task_obj.model_dump(by_alias=True, exclude_none=True)))
+
+
+def _would_create_cycle(
+    team_dir: Path, from_id: str, to_id: str, pending_edges: dict[str, set[str]]
+) -> bool:
+    """True if making from_id blocked_by to_id creates a cycle.
+
+    BFS from to_id through blocked_by chains (on-disk + pending);
+    cycle if it reaches from_id.
+    """
+    visited: set[str] = set()
+    queue = deque([to_id])
+    while queue:
+        current = queue.popleft()
+        if current == from_id:
+            return True
+        if current in visited:
+            continue
+        visited.add(current)
+        fpath = team_dir / f"{current}.json"
+        if fpath.exists():
+            task = TaskFile(**json.loads(fpath.read_text()))
+            queue.extend(d for d in task.blocked_by if d not in visited)
+        queue.extend(d for d in pending_edges.get(current, set()) if d not in visited)
+    return False
 
 
 def next_task_id(team_name: str, base_dir: Path | None = None) -> str:
@@ -110,7 +132,69 @@ def update_task(
     fpath = team_dir / f"{task_id}.json"
 
     with file_lock(lock_path):
+        # --- Phase 1: Read ---
         task = TaskFile(**json.loads(fpath.read_text()))
+
+        # --- Phase 2: Validate (no disk writes) ---
+        pending_edges: dict[str, set[str]] = {}
+
+        if add_blocks:
+            for b in add_blocks:
+                if b == task_id:
+                    raise ValueError(f"Task {task_id} cannot block itself")
+                if not (team_dir / f"{b}.json").exists():
+                    raise ValueError(f"Referenced task {b!r} does not exist")
+            for b in add_blocks:
+                pending_edges.setdefault(b, set()).add(task_id)
+
+        if add_blocked_by:
+            for b in add_blocked_by:
+                if b == task_id:
+                    raise ValueError(f"Task {task_id} cannot be blocked by itself")
+                if not (team_dir / f"{b}.json").exists():
+                    raise ValueError(f"Referenced task {b!r} does not exist")
+            for b in add_blocked_by:
+                pending_edges.setdefault(task_id, set()).add(b)
+
+        if add_blocks:
+            for b in add_blocks:
+                if _would_create_cycle(team_dir, b, task_id, pending_edges):
+                    raise ValueError(
+                        f"Adding block {task_id} -> {b} would create a circular dependency"
+                    )
+
+        if add_blocked_by:
+            for b in add_blocked_by:
+                if _would_create_cycle(team_dir, task_id, b, pending_edges):
+                    raise ValueError(
+                        f"Adding dependency {task_id} blocked_by {b} would create a circular dependency"
+                    )
+
+        if status is not None and status != "deleted":
+            cur_order = _STATUS_ORDER[task.status]
+            new_order = _STATUS_ORDER.get(status)
+            if new_order is None:
+                raise ValueError(f"Invalid status: {status!r}")
+            if new_order < cur_order:
+                raise ValueError(
+                    f"Cannot transition from {task.status!r} to {status!r}"
+                )
+            effective_blocked_by = set(task.blocked_by)
+            if add_blocked_by:
+                effective_blocked_by.update(add_blocked_by)
+            if status in ("in_progress", "completed") and effective_blocked_by:
+                for blocker_id in effective_blocked_by:
+                    blocker_path = team_dir / f"{blocker_id}.json"
+                    if blocker_path.exists():
+                        blocker = TaskFile(**json.loads(blocker_path.read_text()))
+                        if blocker.status != "completed":
+                            raise ValueError(
+                                f"Cannot set status to {status!r}: "
+                                f"blocked by task {blocker_id} (status: {blocker.status!r})"
+                            )
+
+        # --- Phase 3: Mutate (in-memory only) ---
+        pending_writes: dict[Path, TaskFile] = {}
 
         if subject is not None:
             task.subject = subject
@@ -122,30 +206,34 @@ def update_task(
             task.owner = owner
 
         if add_blocks:
-            for b in add_blocks:
-                if b == task_id:
-                    raise ValueError(f"Task {task_id} cannot block itself")
-                if not (team_dir / f"{b}.json").exists():
-                    raise ValueError(f"Referenced task {b!r} does not exist")
             existing = set(task.blocks)
             for b in add_blocks:
                 if b not in existing:
                     task.blocks.append(b)
                     existing.add(b)
-                _sync_dependency(team_dir, b, "blocked_by", task_id)
+                b_path = team_dir / f"{b}.json"
+                if b_path in pending_writes:
+                    other = pending_writes[b_path]
+                else:
+                    other = TaskFile(**json.loads(b_path.read_text()))
+                if task_id not in other.blocked_by:
+                    other.blocked_by.append(task_id)
+                pending_writes[b_path] = other
 
         if add_blocked_by:
-            for b in add_blocked_by:
-                if b == task_id:
-                    raise ValueError(f"Task {task_id} cannot be blocked by itself")
-                if not (team_dir / f"{b}.json").exists():
-                    raise ValueError(f"Referenced task {b!r} does not exist")
             existing = set(task.blocked_by)
             for b in add_blocked_by:
                 if b not in existing:
                     task.blocked_by.append(b)
                     existing.add(b)
-                _sync_dependency(team_dir, b, "blocks", task_id)
+                b_path = team_dir / f"{b}.json"
+                if b_path in pending_writes:
+                    other = pending_writes[b_path]
+                else:
+                    other = TaskFile(**json.loads(b_path.read_text()))
+                if task_id not in other.blocks:
+                    other.blocks.append(task_id)
+                pending_writes[b_path] = other
 
         if metadata is not None:
             current = task.metadata or {}
@@ -157,26 +245,7 @@ def update_task(
             task.metadata = current if current else None
 
         if status is not None and status != "deleted":
-            cur_order = _STATUS_ORDER[task.status]
-            new_order = _STATUS_ORDER.get(status)
-            if new_order is None:
-                raise ValueError(f"Invalid status: {status!r}")
-            if new_order < cur_order:
-                raise ValueError(
-                    f"Cannot transition from {task.status!r} to {status!r}"
-                )
-            if status in ("in_progress", "completed") and task.blocked_by:
-                for blocker_id in task.blocked_by:
-                    blocker_path = team_dir / f"{blocker_id}.json"
-                    if blocker_path.exists():
-                        blocker = TaskFile(**json.loads(blocker_path.read_text()))
-                        if blocker.status != "completed":
-                            raise ValueError(
-                                f"Cannot set status to {status!r}: "
-                                f"blocked by task {blocker_id} (status: {blocker.status!r})"
-                            )
             task.status = status
-
             if status == "completed":
                 for f in team_dir.glob("*.json"):
                     try:
@@ -185,22 +254,27 @@ def update_task(
                         continue
                     if f.stem == task_id:
                         continue
-                    other = TaskFile(**json.loads(f.read_text()))
+                    if f in pending_writes:
+                        other = pending_writes[f]
+                    else:
+                        other = TaskFile(**json.loads(f.read_text()))
                     if task_id in other.blocked_by:
                         other.blocked_by.remove(task_id)
-                        f.write_text(
-                            json.dumps(other.model_dump(by_alias=True, exclude_none=True))
-                        )
+                        pending_writes[f] = other
 
         if status == "deleted":
             task.status = "deleted"
-            fpath.unlink()
             for f in team_dir.glob("*.json"):
                 try:
                     int(f.stem)
                 except ValueError:
                     continue
-                other = TaskFile(**json.loads(f.read_text()))
+                if f.stem == task_id:
+                    continue
+                if f in pending_writes:
+                    other = pending_writes[f]
+                else:
+                    other = TaskFile(**json.loads(f.read_text()))
                 changed = False
                 if task_id in other.blocked_by:
                     other.blocked_by.remove(task_id)
@@ -209,14 +283,17 @@ def update_task(
                     other.blocks.remove(task_id)
                     changed = True
                 if changed:
-                    f.write_text(
-                        json.dumps(other.model_dump(by_alias=True, exclude_none=True))
-                    )
-            return task
+                    pending_writes[f] = other
 
-        fpath.write_text(
-            json.dumps(task.model_dump(by_alias=True, exclude_none=True))
-        )
+        # --- Phase 4: Write ---
+        if status == "deleted":
+            _flush_pending_writes(pending_writes)
+            fpath.unlink()
+        else:
+            fpath.write_text(
+                json.dumps(task.model_dump(by_alias=True, exclude_none=True))
+            )
+            _flush_pending_writes(pending_writes)
 
     return task
 
@@ -224,6 +301,8 @@ def update_task(
 def list_tasks(
     team_name: str, base_dir: Path | None = None
 ) -> list[TaskFile]:
+    if not team_exists(team_name, base_dir):
+        raise ValueError(f"Team {team_name!r} does not exist")
     team_dir = _tasks_dir(base_dir) / team_name
     tasks: list[TaskFile] = []
     for f in team_dir.glob("*.json"):
@@ -250,7 +329,8 @@ def reset_owner_tasks(
                 continue
             task = TaskFile(**json.loads(f.read_text()))
             if task.owner == agent_name:
-                task.status = "pending"
+                if task.status != "completed":
+                    task.status = "pending"
                 task.owner = None
                 f.write_text(
                     json.dumps(task.model_dump(by_alias=True, exclude_none=True))

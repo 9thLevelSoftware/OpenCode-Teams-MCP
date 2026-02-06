@@ -285,7 +285,10 @@ def task_update(
 @mcp.tool
 def task_list(team_name: str) -> list[dict]:
     """List all tasks for a team with their current status and assignments."""
-    result = tasks.list_tasks(team_name)
+    try:
+        result = tasks.list_tasks(team_name)
+    except ValueError as e:
+        raise ToolError(str(e))
     return [t.model_dump(by_alias=True, exclude_none=True) for t in result]
 
 
