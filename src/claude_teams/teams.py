@@ -45,6 +45,8 @@ def create_team(
 ) -> TeamCreateResult:
     if not _VALID_NAME_RE.match(name):
         raise ValueError(f"Invalid team name: {name!r}. Use only letters, numbers, hyphens, underscores.")
+    if len(name) > 64:
+        raise ValueError(f"Team name too long ({len(name)} chars, max 64): {name[:20]!r}...")
 
     teams_dir = _teams_dir(base_dir)
     tasks_dir = _tasks_dir(base_dir)
@@ -134,6 +136,9 @@ def delete_team(name: str, base_dir: Path | None = None) -> TeamDeleteResult:
 
 def add_member(name: str, member: TeammateMember, base_dir: Path | None = None) -> None:
     config = read_config(name, base_dir=base_dir)
+    existing_names = {m.name for m in config.members}
+    if member.name in existing_names:
+        raise ValueError(f"Member {member.name!r} already exists in team {name!r}")
     config.members.append(member)
     write_config(name, config, base_dir=base_dir)
 

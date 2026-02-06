@@ -99,6 +99,24 @@ class TestBuildSpawnCommand:
         assert "--plan-mode-required" in cmd
 
 
+class TestSpawnTeammateNameValidation:
+    def test_should_reject_empty_name(self, team_dir: Path) -> None:
+        with pytest.raises(ValueError, match="Invalid"):
+            spawn_teammate(TEAM, "", "prompt", "/bin/echo", SESSION_ID, base_dir=team_dir)
+
+    def test_should_reject_name_with_special_chars(self, team_dir: Path) -> None:
+        with pytest.raises(ValueError, match="Invalid"):
+            spawn_teammate(TEAM, "agent!@#", "prompt", "/bin/echo", SESSION_ID, base_dir=team_dir)
+
+    def test_should_reject_name_exceeding_64_chars(self, team_dir: Path) -> None:
+        with pytest.raises(ValueError, match="too long"):
+            spawn_teammate(TEAM, "a" * 65, "prompt", "/bin/echo", SESSION_ID, base_dir=team_dir)
+
+    def test_should_reject_reserved_name_team_lead(self, team_dir: Path) -> None:
+        with pytest.raises(ValueError, match="reserved"):
+            spawn_teammate(TEAM, "team-lead", "prompt", "/bin/echo", SESSION_ID, base_dir=team_dir)
+
+
 class TestSpawnTeammate:
     @patch("claude_teams.spawner.subprocess")
     def test_registers_member_before_spawn(

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from claude_teams import messaging, teams
 from claude_teams.models import COLOR_PALETTE, InboxMessage, TeammateMember
+from claude_teams.teams import _VALID_NAME_RE
 
 
 def discover_claude_binary() -> str:
@@ -62,6 +63,13 @@ def spawn_teammate(
     plan_mode_required: bool = False,
     base_dir: Path | None = None,
 ) -> TeammateMember:
+    if not _VALID_NAME_RE.match(name):
+        raise ValueError(f"Invalid agent name: {name!r}. Use only letters, numbers, hyphens, underscores.")
+    if len(name) > 64:
+        raise ValueError(f"Agent name too long ({len(name)} chars, max 64)")
+    if name == "team-lead":
+        raise ValueError("Agent name 'team-lead' is reserved")
+
     color = assign_color(team_name, base_dir)
     now_ms = int(time.time() * 1000)
 

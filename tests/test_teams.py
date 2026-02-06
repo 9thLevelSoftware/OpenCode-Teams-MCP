@@ -73,6 +73,14 @@ class TestCreateTeam:
             with pytest.raises(ValueError):
                 create_team(bad_name, "sess-x", base_dir=tmp_claude_dir)
 
+    def test_should_reject_name_exceeding_max_length(self, tmp_claude_dir: Path) -> None:
+        with pytest.raises(ValueError, match="too long"):
+            create_team("a" * 65, "sess-x", base_dir=tmp_claude_dir)
+
+    def test_should_accept_name_at_max_length(self, tmp_claude_dir: Path) -> None:
+        result = create_team("a" * 64, "sess-x", base_dir=tmp_claude_dir)
+        assert result.team_name == "a" * 64
+
 
 class TestDeleteTeam:
     def test_delete_team_removes_directories(self, tmp_claude_dir: Path) -> None:
@@ -112,6 +120,26 @@ class TestMembers:
         cfg = read_config("squad2", base_dir=tmp_claude_dir)
         assert len(cfg.members) == 1
         assert cfg.members[0].name == "team-lead"
+
+
+class TestDuplicateMember:
+    def test_should_reject_duplicate_member_name(self, tmp_claude_dir: Path) -> None:
+        create_team("dup", "sess-1", base_dir=tmp_claude_dir)
+        mate = _make_teammate("worker", "dup")
+        add_member("dup", mate, base_dir=tmp_claude_dir)
+        mate2 = _make_teammate("worker", "dup")
+        with pytest.raises(ValueError, match="already exists"):
+            add_member("dup", mate2, base_dir=tmp_claude_dir)
+
+    def test_should_allow_member_after_removal(self, tmp_claude_dir: Path) -> None:
+        create_team("reuse", "sess-1", base_dir=tmp_claude_dir)
+        mate = _make_teammate("worker", "reuse")
+        add_member("reuse", mate, base_dir=tmp_claude_dir)
+        remove_member("reuse", "worker", base_dir=tmp_claude_dir)
+        mate2 = _make_teammate("worker", "reuse")
+        add_member("reuse", mate2, base_dir=tmp_claude_dir)
+        cfg = read_config("reuse", base_dir=tmp_claude_dir)
+        assert any(m.name == "worker" for m in cfg.members)
 
 
 class TestWriteConfig:

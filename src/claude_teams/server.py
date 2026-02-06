@@ -61,7 +61,10 @@ def team_create(
 def team_delete(team_name: str, ctx: Context) -> dict:
     """Delete a team and all its data. Fails if any teammates are still active.
     Removes both team config and task directories."""
-    result = teams.delete_team(team_name)
+    try:
+        result = teams.delete_team(team_name)
+    except (RuntimeError, FileNotFoundError) as e:
+        raise ToolError(str(e))
     _get_lifespan(ctx)["active_team"] = None
     return result.model_dump()
 
@@ -213,6 +216,12 @@ def send_message(
             ).model_dump(exclude_none=True)
 
     elif type == "plan_approval_response":
+        if not recipient:
+            raise ToolError("Plan approval recipient must not be empty")
+        config = teams.read_config(team_name)
+        member_names = {m.name for m in config.members}
+        if recipient not in member_names:
+            raise ToolError(f"Recipient {recipient!r} is not a member of team {team_name!r}")
         if approve:
             messaging.send_plain_message(
                 team_name, sender, recipient,
@@ -354,12 +363,15 @@ async def poll_inbox(
     """Poll an agent's inbox for new unread messages, waiting up to timeout_ms.
     Returns unread messages and marks them as read. Convenience tool for MCP
     clients that cannot watch the filesystem."""
+    msgs = messaging.read_inbox(team_name, agent_name, unread_only=True, mark_as_read=True)
+    if msgs:
+        return [m.model_dump(by_alias=True, exclude_none=True) for m in msgs]
     deadline = time.time() + timeout_ms / 1000.0
     while time.time() < deadline:
+        await asyncio.sleep(0.5)
         msgs = messaging.read_inbox(team_name, agent_name, unread_only=True, mark_as_read=True)
         if msgs:
             return [m.model_dump(by_alias=True, exclude_none=True) for m in msgs]
-        await asyncio.sleep(0.5)
     return []
 
 

@@ -62,22 +62,32 @@ def read_inbox(
     if not path.exists():
         return []
 
-    raw_list = json.loads(path.read_text())
-    all_msgs = [InboxMessage.model_validate(entry) for entry in raw_list]
+    if mark_as_read:
+        lock_path = path.parent / ".lock"
+        with file_lock(lock_path):
+            raw_list = json.loads(path.read_text())
+            all_msgs = [InboxMessage.model_validate(entry) for entry in raw_list]
 
-    if unread_only:
-        result = [m for m in all_msgs if not m.read]
+            if unread_only:
+                result = [m for m in all_msgs if not m.read]
+            else:
+                result = list(all_msgs)
+
+            if result:
+                for m in all_msgs:
+                    if m in result:
+                        m.read = True
+                serialized = [m.model_dump(by_alias=True, exclude_none=True) for m in all_msgs]
+                path.write_text(json.dumps(serialized))
+
+            return result
     else:
-        result = list(all_msgs)
+        raw_list = json.loads(path.read_text())
+        all_msgs = [InboxMessage.model_validate(entry) for entry in raw_list]
 
-    if mark_as_read and result:
-        for m in all_msgs:
-            if m in result:
-                m.read = True
-        serialized = [m.model_dump(by_alias=True, exclude_none=True) for m in all_msgs]
-        path.write_text(json.dumps(serialized))
-
-    return result
+        if unread_only:
+            return [m for m in all_msgs if not m.read]
+        return list(all_msgs)
 
 
 def append_message(

@@ -465,3 +465,75 @@ class TestPollInbox:
         )
         assert len(result) == 1
         assert result[0]["text"] == "wake up"
+
+    async def test_should_return_existing_messages_with_zero_timeout(self, client: Client):
+        await client.call_tool("team_create", {"team_name": "t6c"})
+        teams.add_member("t6c", _make_teammate("bob", "t6c"))
+        await client.call_tool(
+            "send_message",
+            {
+                "team_name": "t6c",
+                "type": "message",
+                "recipient": "bob",
+                "content": "instant",
+                "summary": "fast",
+            },
+        )
+        result = _data(
+            await client.call_tool(
+                "poll_inbox",
+                {"team_name": "t6c", "agent_name": "bob", "timeout_ms": 0},
+            )
+        )
+        assert len(result) == 1
+        assert result[0]["text"] == "instant"
+
+
+class TestTeamDeleteErrorWrapping:
+    async def test_should_reject_delete_with_active_members(self, client: Client):
+        await client.call_tool("team_create", {"team_name": "td1"})
+        teams.add_member("td1", _make_teammate("worker", "td1"))
+        result = await client.call_tool(
+            "team_delete", {"team_name": "td1"}, raise_on_error=False,
+        )
+        assert result.is_error is True
+        assert "member" in result.content[0].text.lower()
+
+    async def test_should_reject_delete_nonexistent_team(self, client: Client):
+        result = await client.call_tool(
+            "team_delete", {"team_name": "ghost-team"}, raise_on_error=False,
+        )
+        assert result.is_error is True
+        assert "Traceback" not in result.content[0].text
+
+
+class TestPlanApprovalValidation:
+    async def test_should_reject_plan_approval_to_nonexistent_recipient(self, client: Client):
+        await client.call_tool("team_create", {"team_name": "tp1"})
+        result = await client.call_tool(
+            "send_message",
+            {
+                "team_name": "tp1",
+                "type": "plan_approval_response",
+                "recipient": "ghost",
+                "approve": True,
+            },
+            raise_on_error=False,
+        )
+        assert result.is_error is True
+        assert "ghost" in result.content[0].text
+
+    async def test_should_reject_plan_approval_with_empty_recipient(self, client: Client):
+        await client.call_tool("team_create", {"team_name": "tp2"})
+        result = await client.call_tool(
+            "send_message",
+            {
+                "team_name": "tp2",
+                "type": "plan_approval_response",
+                "recipient": "",
+                "approve": True,
+            },
+            raise_on_error=False,
+        )
+        assert result.is_error is True
+        assert "recipient" in result.content[0].text.lower()
