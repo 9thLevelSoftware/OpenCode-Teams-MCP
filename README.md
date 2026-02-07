@@ -6,7 +6,11 @@ MCP server that implements Claude Code's [agent teams](https://code.claude.com/d
 
 </div>
 
-<video src=".github/assets/opencode-claude-teams.mov" controls width="100%"></video>
+
+
+https://github.com/user-attachments/assets/24038163-455d-4fd5-afac-4a3f904a7b4b
+
+
 
 ## About
 
