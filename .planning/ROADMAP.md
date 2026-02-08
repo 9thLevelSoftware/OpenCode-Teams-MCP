@@ -93,11 +93,11 @@ Plans:
   1. The system can query a tmux pane to determine if the OpenCode process is still alive or has exited
   2. The system can detect a hung agent (process alive but unresponsive -- no output for configurable duration)
   3. The system can force-kill an unresponsive OpenCode instance and clean up its tmux pane
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 05-01: Tmux pane liveness detection
-- [ ] 05-02: Hung agent detection and force-kill
+- [ ] 05-01-PLAN.md -- Core health detection functions: AgentHealthStatus model, check_pane_alive, capture_pane_content_hash, check_single_agent_health, health state persistence, and tests
+- [ ] 05-02-PLAN.md -- MCP tool exposure: check_agent_health and check_all_agents_health tools with integration tests
 
 ### Phase 6: Agent Templates
 **Goal**: Users can spawn agents with pre-built role templates (researcher, implementer, reviewer, tester) that include role-appropriate system prompts and can be customized per-spawn
