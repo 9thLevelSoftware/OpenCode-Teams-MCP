@@ -1,6 +1,7 @@
 import asyncio
 import time
 import uuid
+from pathlib import Path
 from typing import Any, Literal
 
 from fastmcp import Context, FastMCP
@@ -16,7 +17,7 @@ from claude_teams.models import (
     SpawnResult,
     TeammateMember,
 )
-from claude_teams.spawner import discover_opencode_binary, kill_tmux_pane, spawn_teammate, translate_model
+from claude_teams.spawner import cleanup_agent_config, discover_opencode_binary, kill_tmux_pane, spawn_teammate, translate_model
 
 
 @lifespan
@@ -93,6 +94,7 @@ def spawn_teammate_tool(
         model=resolved_model,
         subagent_type=subagent_type,
         plan_mode_required=plan_mode_required,
+        project_dir=Path.cwd(),
     )
     return SpawnResult(
         agent_id=member.agent_id,
@@ -352,6 +354,7 @@ def force_kill_teammate(team_name: str, agent_name: str) -> dict:
         kill_tmux_pane(pane_id)
     teams.remove_member(team_name, agent_name)
     tasks.reset_owner_tasks(team_name, agent_name)
+    cleanup_agent_config(Path.cwd(), agent_name)
     return {"success": True, "message": f"{agent_name} has been stopped."}
 
 
@@ -384,6 +387,7 @@ def process_shutdown_approved(team_name: str, agent_name: str) -> dict:
         raise ToolError("Cannot process shutdown for team-lead")
     teams.remove_member(team_name, agent_name)
     tasks.reset_owner_tasks(team_name, agent_name)
+    cleanup_agent_config(Path.cwd(), agent_name)
     return {"success": True, "message": f"{agent_name} removed from team."}
 
 

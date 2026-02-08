@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 
 from claude_teams import messaging, teams
+from claude_teams.config_gen import generate_agent_config, write_agent_config, ensure_opencode_json
 from claude_teams.models import COLOR_PALETTE, InboxMessage, TeammateMember
 from claude_teams.teams import _VALID_NAME_RE
 
@@ -136,6 +137,7 @@ def spawn_teammate(
     cwd: str | None = None,
     plan_mode_required: bool = False,
     base_dir: Path | None = None,
+    project_dir: Path | None = None,
 ) -> TeammateMember:
     if not _VALID_NAME_RE.match(name):
         raise ValueError(f"Invalid agent name: {name!r}. Use only letters, numbers, hyphens, underscores.")
@@ -173,6 +175,18 @@ def spawn_teammate(
     )
     messaging.append_message(team_name, name, initial_msg, base_dir)
 
+    # Generate agent config for OpenCode
+    project = project_dir or Path.cwd()
+    config_content = generate_agent_config(
+        agent_id=member.agent_id,
+        name=name,
+        team_name=team_name,
+        color=color,
+        model=model,
+    )
+    write_agent_config(project, name, config_content)
+    ensure_opencode_json(project, mcp_server_command="uv run claude-teams")
+
     cmd = build_spawn_command(member, claude_binary, lead_session_id)
     result = subprocess.run(
         ["tmux", "split-window", "-dP", "-F", "#{pane_id}", cmd],
@@ -195,6 +209,17 @@ def spawn_teammate(
 
 def kill_tmux_pane(pane_id: str) -> None:
     subprocess.run(["tmux", "kill-pane", "-t", pane_id], check=False)
+
+
+def cleanup_agent_config(project_dir: Path, name: str) -> None:
+    """Clean up agent config file when agent is killed or removed.
+
+    Args:
+        project_dir: Project root directory containing .opencode/agents/
+        name: Agent name (used to derive config filename)
+    """
+    config_file = project_dir / ".opencode" / "agents" / f"{name}.md"
+    config_file.unlink(missing_ok=True)
 
 
 # OpenCode binary discovery and configuration functions
