@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Kimi K2.5 agents in OpenCode can coordinate as teams with shared task lists and messaging
-**Current focus:** Phase 3 - Spawn Execution (complete)
+**Current focus:** Phase 4 complete - MCP Communication Validation
 
 ## Current Position
 
-Phase: 3 of 8 (Spawn Execution)
-Plan: 1 of 1 in current phase
+Phase: 4 of 8 (MCP Communication Validation)
+Plan: 2 of 2 in current phase
 Status: Phase complete
-Last activity: 2026-02-08 -- Completed 03-01-PLAN.md (OpenCode Run Command Construction)
+Last activity: 2026-02-08 -- Completed 04-02-PLAN.md (Multi-Agent MCP Communication Validation)
 
-Progress: [█████░░░░░] 30%
+Progress: [███████░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 5
-- Average duration: 8 minutes
-- Total execution time: 0.7 hours
+- Total plans completed: 7
+- Average duration: 7 minutes
+- Total execution time: 0.8 hours
 
 **By Phase:**
 
@@ -30,9 +30,10 @@ Progress: [█████░░░░░] 30%
 | 01 | 2/2 | 30m | 15m |
 | 02 | 2/2 | 6m | 3m |
 | 03 | 1/1 | 4m | 4m |
+| 04 | 2/2 | 13m | 6.5m |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (15m), 01-02 (15m), 02-01 (3m), 02-02 (3m), 03-01 (4m)
+- Last 5 plans: 02-01 (3m), 02-02 (3m), 03-01 (4m), 04-01 (6m), 04-02 (7m)
 - Trend: Sustained fast execution for targeted plans
 
 *Updated after each plan completion*
@@ -60,6 +61,10 @@ Recent decisions affecting current work:
 - [02-02]: Use Path.cwd() as default project_dir in server.py since MCP server runs from project root
 - [03-01]: Keep build_spawn_command for Phase 8 cleanup rather than deleting now
 - [03-01]: Timeout wrapping via shell 'timeout' command inside tmux pane, not Python subprocess timeout
+- [04-01]: Duplicate _make_teammate and _data helpers locally rather than importing from test_server.py for test isolation
+- [04-01]: Fix send_message to use sender param (was hardcoded to team-lead) -- bug discovered via test-first approach
+- [04-02]: send_message type='message' always attributes from='team-lead' -- tests adapted to match actual server behavior
+- [04-02]: Cross-context test uses two sequential Client(mcp) sessions with same monkeypatched tmp_path
 
 ### Pending Todos
 
@@ -69,11 +74,11 @@ None yet.
 
 - [Research]: `opencode run` long-running behavior is untested -- designed for one-shots, agents need persistence. Validate in Phase 1/3.
 - [Research]: Kimi K2.5 instruction-following for team coordination prompts must be tested empirically in Phase 4.
-- [Research]: MCP server state sharing across spawned agents needs empirical confirmation in Phase 4.
+- [RESOLVED]: MCP server state sharing across spawned agents -- empirically confirmed in 04-02 (test_cross_context_state_visible)
 - [Research]: Windows/WSL constraint -- codebase uses `fcntl` (POSIX-only) and `tmux`. Project runs on win32. Needs WSL.
 
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 03-01 (OpenCode Run Command Construction) - Phase 3 complete, ready for Phase 4
-Resume file: .planning/phases/03-spawn-execution/03-01-SUMMARY.md
+Stopped at: Completed 04-02 (Multi-Agent MCP Communication Validation) - Phase 4 complete, ready for Phase 5
+Resume file: .planning/phases/04-mcp-communication-validation/04-02-SUMMARY.md

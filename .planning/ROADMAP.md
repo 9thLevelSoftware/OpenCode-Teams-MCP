@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Binary Discovery & Model Configuration** - Find OpenCode on PATH and translate model specifications to Kimi K2.5 format ✓
 - [x] **Phase 2: Agent Config Generation** - Dynamically generate `.opencode/agents/<name>.md` files with team context, MCP tools, and permissions ✓
 - [x] **Phase 3: Spawn Execution** - Construct and execute `opencode run` commands in tmux panes with timeout protection ✓
-- [ ] **Phase 4: MCP Communication Validation** - Verify spawned agents can exchange messages and share state through the MCP server
+- [x] **Phase 4: MCP Communication Validation** - Verify spawned agents can exchange messages and share state through the MCP server ✓
 - [ ] **Phase 5: Agent Health & Monitoring** - Detect dead/hung agents and force-kill unresponsive instances
 - [ ] **Phase 6: Agent Templates** - Pre-built role templates for common agent specializations
 - [ ] **Phase 7: Desktop Spawning** - Support launching OpenCode desktop app as an alternative to CLI
@@ -82,8 +82,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md -- Single-agent MCP tool access verification and config_gen send_message fix
-- [ ] 04-02-PLAN.md -- Multi-agent message exchange, task sharing, and filesystem state verification
+- [x] 04-01-PLAN.md -- Single-agent MCP tool access verification and config_gen send_message fix ✓
+- [x] 04-02-PLAN.md -- Multi-agent message exchange, task sharing, and filesystem state verification ✓
 
 ### Phase 5: Agent Health & Monitoring
 **Goal**: The system can detect when a spawned agent has died or hung, and forcefully terminate unresponsive agents
@@ -155,7 +155,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 1. Binary Discovery & Model Configuration | 2/2 | ✓ Complete | 2026-02-08 |
 | 2. Agent Config Generation | 2/2 | ✓ Complete | 2026-02-08 |
 | 3. Spawn Execution | 1/1 | ✓ Complete | 2026-02-08 |
-| 4. MCP Communication Validation | 0/2 | Not started | - |
+| 4. MCP Communication Validation | 2/2 | ✓ Complete | 2026-02-08 |
 | 5. Agent Health & Monitoring | 0/2 | Not started | - |
 | 6. Agent Templates | 0/2 | Not started | - |
 | 7. Desktop Spawning | 0/2 | Not started | - |
