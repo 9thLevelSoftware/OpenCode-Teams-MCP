@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 import json
-import os
-import sys
 import time
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
 from pydantic import BaseModel
 
+from opencode_teams._filelock import file_lock
 from opencode_teams.models import (
     InboxMessage,
     ShutdownRequest,
@@ -22,35 +20,6 @@ TEAMS_DIR = Path.home() / ".opencode-teams" / "teams"
 
 def _teams_dir(base_dir: Path | None = None) -> Path:
     return (base_dir / "teams") if base_dir else TEAMS_DIR
-
-
-if sys.platform == "win32":
-    import msvcrt
-
-    @contextmanager
-    def file_lock(lock_path: Path):
-        lock_path.touch(exist_ok=True)
-        f = open(lock_path, "r")
-        try:
-            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
-            try:
-                yield
-            finally:
-                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
-        finally:
-            f.close()
-else:
-    import fcntl
-
-    @contextmanager
-    def file_lock(lock_path: Path):
-        lock_path.touch(exist_ok=True)
-        with open(lock_path) as f:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            try:
-                yield
-            finally:
-                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
 def now_iso() -> str:

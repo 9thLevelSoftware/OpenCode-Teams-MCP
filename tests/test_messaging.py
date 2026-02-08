@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 import threading
 from pathlib import Path
 
 import pytest
+from filelock import FileLock
 
 from opencode_teams.models import (
     InboxMessage,
@@ -165,16 +165,14 @@ def test_send_shutdown_request_with_reason(tmp_base_dir):
     assert parsed["reason"] == "Done"
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="fcntl not available on Windows")
 def test_should_not_lose_message_appended_during_mark_as_read(tmp_base_dir):
-    import fcntl
-
+    """Verify read_inbox waits for the lock before proceeding."""
     msg_a = InboxMessage(from_="lead", text="A", timestamp=now_iso(), read=False, summary="a")
     append_message("test-team", "race", msg_a, base_dir=tmp_base_dir)
 
     path = inbox_path("test-team", "race", base_dir=tmp_base_dir)
     lock_path = path.parent / ".lock"
-    lock_path.touch(exist_ok=True)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
 
     completed = threading.Event()
 
@@ -182,12 +180,11 @@ def test_should_not_lose_message_appended_during_mark_as_read(tmp_base_dir):
         read_inbox("test-team", "race", mark_as_read=True, base_dir=tmp_base_dir)
         completed.set()
 
-    with open(lock_path) as f:
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+    lock = FileLock(str(lock_path))
+    with lock:
         reader = threading.Thread(target=do_read)
         reader.start()
         completed_without_lock = completed.wait(timeout=1.0)
-        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
     reader.join(timeout=5)
 
