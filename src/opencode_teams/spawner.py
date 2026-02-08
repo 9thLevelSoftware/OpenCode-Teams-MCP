@@ -310,27 +310,31 @@ def build_windows_terminal_command(
 
     # PowerShell command that:
     # 1. Changes to the working directory
-    # 2. Runs opencode with a timeout
-    # 3. Keeps window open on error (for debugging)
+    # 2. Runs opencode directly (not via Start-Process)
+    # 3. Always keeps window open for debugging
     ps_script = f"""
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 Set-Location -Path '{member.cwd}'
 $title = '[OpenCode] {member.name}'
 $host.UI.RawUI.WindowTitle = $title
-Write-Host "Starting OpenCode agent: {member.name}" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "OpenCode Agent: {member.name}" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Model: {member.model}" -ForegroundColor Gray
 Write-Host "Working directory: {member.cwd}" -ForegroundColor Gray
 Write-Host ""
-try {{
-    $process = Start-Process -FilePath '{opencode_binary}' -ArgumentList 'run','--agent','{member.name}','--model','{member.model}','--format','json','{escaped_prompt}' -PassThru -NoNewWindow -Wait
-    if ($process.ExitCode -ne 0) {{
-        Write-Host "Agent exited with code: $($process.ExitCode)" -ForegroundColor Yellow
-    }}
-}} catch {{
-    Write-Host "Error: $_" -ForegroundColor Red
-    Write-Host "Press any key to close..." -ForegroundColor Gray
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-}}
+Write-Host "Starting opencode run..." -ForegroundColor Yellow
+Write-Host ""
+
+# Run opencode directly so output shows in this window
+& '{opencode_binary}' run --agent '{member.name}' --model '{member.model}' '{escaped_prompt}'
+$exitCode = $LASTEXITCODE
+
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Yellow
+Write-Host "Agent exited with code: $exitCode" -ForegroundColor Yellow
+Write-Host "Press any key to close this window..." -ForegroundColor Gray
+$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
 """
 
     return [

@@ -196,20 +196,26 @@ def ensure_opencode_json(
     mcp_server_command: str,
     mcp_server_env: dict[str, str] | None = None,
 ) -> Path:
-    """Create or update opencode.json with opencode-teams MCP server entry.
+    """Create or update .opencode/config.json with opencode-teams MCP server entry.
 
-    If opencode.json exists, preserves all existing keys and merges the opencode-teams
+    If config.json exists, preserves all existing keys and merges the opencode-teams
     MCP entry. If it doesn't exist, creates a new file with schema and MCP config.
+
+    OpenCode expects MCP entries as arrays (command + args), not objects.
+    Example: {"mcp": {"opencode-teams": ["uv", "run", "opencode-teams"]}}
 
     Args:
         project_dir: Project root directory
         mcp_server_command: Command to start MCP server (e.g., "uv run opencode-teams")
-        mcp_server_env: Optional environment variables for MCP server
+        mcp_server_env: Optional environment variables for MCP server (currently unused,
+            kept for API compatibility)
 
     Returns:
-        Path to opencode.json
+        Path to .opencode/config.json
     """
-    opencode_json_path = project_dir / "opencode.json"
+    opencode_dir = project_dir / ".opencode"
+    opencode_dir.mkdir(parents=True, exist_ok=True)
+    opencode_json_path = opencode_dir / "config.json"
 
     # Read existing or create new
     if opencode_json_path.exists():
@@ -222,18 +228,12 @@ def ensure_opencode_json(
     # Ensure mcp section exists
     content.setdefault("mcp", {})
 
-    # Build opencode-teams MCP entry
-    mcp_entry = {
-        "type": "local",
-        "command": mcp_server_command,
-        "enabled": True,
-    }
+    # OpenCode expects MCP entries as command arrays, not objects
+    # Split the command string into array: "uv run opencode-teams" -> ["uv", "run", "opencode-teams"]
+    command_parts = mcp_server_command.split()
 
-    if mcp_server_env:
-        mcp_entry["environment"] = mcp_server_env
-
-    # Merge into mcp section
-    content["mcp"]["opencode-teams"] = mcp_entry
+    # Set the MCP entry as an array
+    content["mcp"]["opencode-teams"] = command_parts
 
     # Write back
     opencode_json_path.write_text(

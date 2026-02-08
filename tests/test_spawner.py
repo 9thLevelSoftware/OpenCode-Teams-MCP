@@ -603,11 +603,11 @@ class TestConfigGenIntegration:
     @patch("opencode_teams.spawner.validate_opencode_version")
     @patch("opencode_teams.spawner.shutil.which")
     @patch("opencode_teams.spawner.subprocess")
-    def test_spawn_creates_opencode_json(
+    def test_spawn_creates_opencode_config_json(
         self, mock_subprocess: MagicMock, mock_which: MagicMock,
         mock_validate: MagicMock, tmp_base_dir: Path, tmp_path: Path
     ) -> None:
-        """Verify spawn_teammate creates opencode.json with MCP server entry"""
+        """Verify spawn_teammate creates .opencode/config.json with MCP server entry"""
         mock_which.return_value = "/usr/local/bin/opencode"
         mock_validate.return_value = "1.1.52"
         mock_subprocess.run.return_value.stdout = "%43\n"
@@ -626,17 +626,17 @@ class TestConfigGenIntegration:
             project_dir=project_dir,
         )
 
-        # Verify opencode.json exists
-        opencode_json = project_dir / "opencode.json"
+        # Verify .opencode/config.json exists
+        opencode_json = project_dir / ".opencode" / "config.json"
         assert opencode_json.exists()
 
-        # Verify content has opencode-teams MCP entry
+        # Verify content has opencode-teams MCP entry as array
         import json
         content = json.loads(opencode_json.read_text())
         assert "mcp" in content
         assert "opencode-teams" in content["mcp"]
-        assert content["mcp"]["opencode-teams"]["type"] == "local"
-        assert "opencode-teams" in content["mcp"]["opencode-teams"]["command"]
+        # OpenCode expects MCP entries as command arrays
+        assert content["mcp"]["opencode-teams"] == ["uv", "run", "opencode-teams"]
 
     def test_cleanup_agent_config_removes_file(self, tmp_path: Path) -> None:
         """Verify cleanup_agent_config removes the config file"""

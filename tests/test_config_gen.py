@@ -488,7 +488,7 @@ class TestWriteAgentConfig:
 
 
 class TestEnsureOpencodeJson:
-    """Tests for ensure_opencode_json() - creates/merges opencode.json with MCP config."""
+    """Tests for ensure_opencode_json() - creates/merges .opencode/config.json with MCP config."""
 
     def test_creates_new_file_when_missing(self, tmp_path: Path) -> None:
         project_dir = tmp_path / "project"
@@ -499,7 +499,7 @@ class TestEnsureOpencodeJson:
             mcp_server_command="uv run opencode-teams",
         )
 
-        expected = project_dir / "opencode.json"
+        expected = project_dir / ".opencode" / "config.json"
         assert result_path == expected
         assert result_path.exists()
 
@@ -540,42 +540,35 @@ class TestEnsureOpencodeJson:
         content = json.loads(result_path.read_text(encoding="utf-8"))
         mcp_entry = content["mcp"]["opencode-teams"]
 
-        assert mcp_entry["type"] == "local"
-        assert mcp_entry["command"] == "uv run opencode-teams"
-        assert mcp_entry["enabled"] is True
+        # OpenCode expects MCP entries as command arrays
+        assert mcp_entry == ["uv", "run", "opencode-teams"]
 
-    def test_mcp_entry_includes_environment_when_provided(self, tmp_path: Path) -> None:
+    def test_mcp_entry_with_complex_command(self, tmp_path: Path) -> None:
         project_dir = tmp_path / "project"
         project_dir.mkdir()
 
-        env = {"DEBUG": "1", "MOONSHOT_API_KEY": "{env:MOONSHOT_API_KEY}"}
-
         result_path = ensure_opencode_json(
             project_dir,
-            mcp_server_command="uv run opencode-teams",
-            mcp_server_env=env,
+            mcp_server_command="python -m opencode_teams.server",
         )
 
         content = json.loads(result_path.read_text(encoding="utf-8"))
         mcp_entry = content["mcp"]["opencode-teams"]
 
-        assert "environment" in mcp_entry
-        assert mcp_entry["environment"] == env
+        assert mcp_entry == ["python", "-m", "opencode_teams.server"]
 
     def test_preserves_existing_config(self, tmp_path: Path) -> None:
         project_dir = tmp_path / "project"
         project_dir.mkdir()
 
-        # Create existing opencode.json with other config
-        opencode_json = project_dir / "opencode.json"
+        # Create existing .opencode/config.json with other config
+        opencode_dir = project_dir / ".opencode"
+        opencode_dir.mkdir()
+        opencode_json = opencode_dir / "config.json"
         existing = {
             "$schema": "custom-schema",
             "mcp": {
-                "other-server": {
-                    "type": "local",
-                    "command": "other",
-                    "enabled": True,
-                }
+                "other-server": ["other", "command"],
             },
             "customKey": "customValue",
         }
@@ -594,22 +587,20 @@ class TestEnsureOpencodeJson:
 
         # Should preserve existing MCP entries
         assert "other-server" in content["mcp"]
-        assert content["mcp"]["other-server"]["command"] == "other"
+        assert content["mcp"]["other-server"] == ["other", "command"]
 
     def test_updates_existing_opencode_teams_entry(self, tmp_path: Path) -> None:
         project_dir = tmp_path / "project"
         project_dir.mkdir()
 
-        # Create existing opencode.json with old opencode-teams entry
-        opencode_json = project_dir / "opencode.json"
+        # Create existing .opencode/config.json with old opencode-teams entry
+        opencode_dir = project_dir / ".opencode"
+        opencode_dir.mkdir()
+        opencode_json = opencode_dir / "config.json"
         existing = {
             "$schema": "schema",
             "mcp": {
-                "opencode-teams": {
-                    "type": "local",
-                    "command": "old-command",
-                    "enabled": False,
-                }
+                "opencode-teams": ["old", "command"],
             },
         }
         opencode_json.write_text(json.dumps(existing, indent=2), encoding="utf-8")
@@ -621,16 +612,17 @@ class TestEnsureOpencodeJson:
 
         content = json.loads(result_path.read_text(encoding="utf-8"))
 
-        # Should update the entry
-        assert content["mcp"]["opencode-teams"]["command"] == "uv run opencode-teams"
-        assert content["mcp"]["opencode-teams"]["enabled"] is True
+        # Should update the entry to new command
+        assert content["mcp"]["opencode-teams"] == ["uv", "run", "opencode-teams"]
 
     def test_creates_mcp_section_if_missing(self, tmp_path: Path) -> None:
         project_dir = tmp_path / "project"
         project_dir.mkdir()
 
-        # Create existing opencode.json without mcp section
-        opencode_json = project_dir / "opencode.json"
+        # Create existing .opencode/config.json without mcp section
+        opencode_dir = project_dir / ".opencode"
+        opencode_dir.mkdir()
+        opencode_json = opencode_dir / "config.json"
         existing = {
             "$schema": "schema",
             "someOtherKey": "value",
