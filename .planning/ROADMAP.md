@@ -66,12 +66,10 @@ Plans:
   3. The tmux pane ID is captured and stored in the team config so the system can track the agent
   4. An initial prompt message is delivered to the teammate's inbox before the spawn command executes
   5. Spawn commands are wrapped with a timeout (e.g., 300s) so hung processes do not block indefinitely
-**Plans**: TBD
+**Plans:** 1 plan (research confirmed SPAWN-07/08/09 already satisfied by existing code; only SPAWN-06 and RELY-01 need new work)
 
 Plans:
-- [ ] 03-01: Command construction and flag mapping
-- [ ] 03-02: Tmux pane spawning and pane ID tracking
-- [ ] 03-03: Initial prompt delivery and timeout wrapping
+- [ ] 03-01-PLAN.md -- Replace build_spawn_command with build_opencode_run_command, add timeout wrapping, rename claude_binary to opencode_binary
 
 ### Phase 4: MCP Communication Validation
 **Goal**: Spawned agents can actually use the MCP server to read their inbox, send messages to teammates, and operate on shared task state
@@ -156,7 +154,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 |-------|----------------|--------|-----------|
 | 1. Binary Discovery & Model Configuration | 2/2 | ✓ Complete | 2026-02-08 |
 | 2. Agent Config Generation | 2/2 | ✓ Complete | 2026-02-08 |
-| 3. Spawn Execution | 0/3 | Not started | - |
+| 3. Spawn Execution | 0/1 | Not started | - |
 | 4. MCP Communication Validation | 0/2 | Not started | - |
 | 5. Agent Health & Monitoring | 0/2 | Not started | - |
 | 6. Agent Templates | 0/2 | Not started | - |
@@ -165,4 +163,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 ---
 *Roadmap created: 2026-02-07*
-*Depth: comprehensive (8 phases, 19 plans)*
+*Depth: comprehensive (8 phases, 17 plans)*
