@@ -264,6 +264,161 @@ class TestGenerateAgentConfig:
         return parts[1]
 
 
+class TestGenerateAgentConfigWithTemplate:
+    """Tests for generate_agent_config() with role_instructions and custom_instructions."""
+
+    def test_role_instructions_injected_in_body(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+            role_instructions="# Role: Researcher\n\nYou focus on research.",
+        )
+        body = self._extract_body(result)
+        assert "# Role: Researcher" in body
+        assert "You focus on research." in body
+
+    def test_role_instructions_appear_before_communication_protocol(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+            role_instructions="# Role: Researcher\n\nResearch focus.",
+        )
+        body = self._extract_body(result)
+        role_pos = body.index("# Role: Researcher")
+        comm_pos = body.index("# Communication Protocol")
+        assert role_pos < comm_pos
+
+    def test_custom_instructions_injected_in_body(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+            custom_instructions="Focus specifically on Python type hints.",
+        )
+        body = self._extract_body(result)
+        assert "Focus specifically on Python type hints." in body
+
+    def test_custom_instructions_wrapped_with_heading(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+            custom_instructions="Focus specifically on Python type hints.",
+        )
+        body = self._extract_body(result)
+        heading_pos = body.index("# Additional Instructions")
+        custom_pos = body.index("Focus specifically on Python type hints.")
+        assert heading_pos < custom_pos
+
+    def test_custom_instructions_appear_after_role_instructions(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+            role_instructions="# Role: Reviewer\n\nReview focus.",
+            custom_instructions="Also check for type safety.",
+        )
+        body = self._extract_body(result)
+        role_pos = body.index("# Role: Reviewer")
+        custom_pos = body.index("# Additional Instructions")
+        assert role_pos < custom_pos
+
+    def test_custom_instructions_appear_before_communication_protocol(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+            custom_instructions="Focus on security.",
+        )
+        body = self._extract_body(result)
+        custom_pos = body.index("# Additional Instructions")
+        comm_pos = body.index("# Communication Protocol")
+        assert custom_pos < comm_pos
+
+    def test_no_template_preserves_existing_behavior(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        # Should still have all existing sections
+        assert "# Agent Identity" in body
+        assert "# Communication Protocol" in body
+        assert "# Task Management" in body
+        assert "# Shutdown Protocol" in body
+        # Should NOT contain template-specific content
+        assert "# Additional Instructions" not in body
+        assert "# Role:" not in body
+
+    def test_role_instructions_only_no_custom(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+            role_instructions="# Role: Tester\n\nTesting focus.",
+        )
+        body = self._extract_body(result)
+        assert "# Role: Tester" in body
+        assert "Testing focus." in body
+        assert "# Additional Instructions" not in body
+
+    def test_custom_instructions_only_no_role(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+            custom_instructions="Pay attention to edge cases.",
+        )
+        body = self._extract_body(result)
+        assert "# Additional Instructions" in body
+        assert "Pay attention to edge cases." in body
+        # No role instructions injected
+        assert "# Role:" not in body
+
+    def _extract_frontmatter(self, config: str) -> dict:
+        """Extract and parse YAML frontmatter."""
+        lines = config.split("\n")
+        assert lines[0] == "---"
+
+        end_idx = None
+        for i in range(1, len(lines)):
+            if lines[i] == "---":
+                end_idx = i
+                break
+
+        assert end_idx is not None, "No closing frontmatter delimiter found"
+
+        frontmatter_text = "\n".join(lines[1:end_idx])
+        return yaml.safe_load(frontmatter_text)
+
+    def _extract_body(self, config: str) -> str:
+        """Extract the body text after frontmatter."""
+        parts = config.split("\n---\n\n", 1)
+        assert len(parts) == 2, "Could not split frontmatter from body"
+        return parts[1]
+
+
 class TestWriteAgentConfig:
     """Tests for write_agent_config() - writes config to .opencode/agents/<name>.md"""
 

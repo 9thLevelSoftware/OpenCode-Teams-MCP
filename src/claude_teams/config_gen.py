@@ -16,6 +16,8 @@ def generate_agent_config(
     team_name: str,
     color: str,
     model: str,
+    role_instructions: str = "",
+    custom_instructions: str = "",
 ) -> str:
     """Generate OpenCode agent config markdown with YAML frontmatter and system prompt.
 
@@ -25,6 +27,10 @@ def generate_agent_config(
         team_name: Team name
         color: Agent color from COLOR_PALETTE
         model: Model string (e.g., "moonshot-ai/kimi-k2.5")
+        role_instructions: Optional role-specific instructions from a template.
+            Injected between Identity and Communication Protocol sections.
+        custom_instructions: Optional user-provided instructions per spawn.
+            Wrapped with "# Additional Instructions" heading.
 
     Returns:
         Complete markdown config string with frontmatter and body
@@ -61,15 +67,30 @@ def generate_agent_config(
         allow_unicode=True,
     )
 
-    # Build system prompt body
-    body = textwrap.dedent(f"""
+    # Build system prompt body from sections
+    body_parts: list[str] = []
+
+    # Section 1: Agent Identity
+    body_parts.append(textwrap.dedent(f"""\
         # Agent Identity
 
         You are **{name}**, a member of team **{team_name}**.
 
         - Agent ID: `{agent_id}`
-        - Color: {color}
+        - Color: {color}"""))
 
+    # Section 2: Role instructions (from template, if provided)
+    if role_instructions:
+        body_parts.append(role_instructions.strip())
+
+    # Section 3: Custom instructions (user per-spawn customization, if provided)
+    if custom_instructions:
+        body_parts.append(
+            f"# Additional Instructions\n\n{custom_instructions.strip()}"
+        )
+
+    # Section 4: Communication Protocol
+    body_parts.append(textwrap.dedent(f"""\
         # Communication Protocol
 
         ## Inbox Polling
@@ -96,8 +117,10 @@ def generate_agent_config(
             summary="status update",
             sender="{name}"
         )
-        ```
+        ```"""))
 
+    # Section 5: Task Management
+    body_parts.append(textwrap.dedent(f"""\
         # Task Management
 
         ## Viewing Tasks
@@ -125,12 +148,15 @@ def generate_agent_config(
             status="in_progress",
             owner="{name}"
         )
-        ```
+        ```"""))
 
+    # Section 6: Shutdown Protocol
+    body_parts.append(textwrap.dedent("""\
         # Shutdown Protocol
 
-        When you receive a `shutdown_request` message, acknowledge it and prepare to exit gracefully.
-    """).strip()
+        When you receive a `shutdown_request` message, acknowledge it and prepare to exit gracefully."""))
+
+    body = "\n\n".join(body_parts)
 
     # Combine frontmatter and body
     config = f"---\n{frontmatter_yaml}---\n\n{body}\n"
