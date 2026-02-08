@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 from unittest.mock import patch, MagicMock
@@ -15,12 +18,16 @@ from claude_teams.spawner import (
     build_spawn_command,
     capture_pane_content_hash,
     check_pane_alive,
+    check_process_alive,
     check_single_agent_health,
     discover_claude_binary,
+    discover_desktop_binary,
     discover_opencode_binary,
     get_credential_env_var,
     get_provider_config,
+    kill_desktop_process,
     kill_tmux_pane,
+    launch_desktop_app,
     load_health_state,
     save_health_state,
     spawn_teammate,
@@ -28,6 +35,9 @@ from claude_teams.spawner import (
     validate_opencode_version,
     DEFAULT_GRACE_PERIOD_SECONDS,
     DEFAULT_HUNG_TIMEOUT_SECONDS,
+    DESKTOP_BINARY_ENV_VAR,
+    DESKTOP_BINARY_NAMES,
+    DESKTOP_PATHS,
     MINIMUM_OPENCODE_VERSION,
     MODEL_ALIASES,
     PROVIDER_CONFIGS,
@@ -903,3 +913,119 @@ class TestHealthStatePersistence:
         loaded = load_health_state(TEAM, base_dir=team_dir)
         assert loaded["worker"]["hash"] == "new"
         assert loaded["worker"]["last_change_time"] == 2.0
+
+
+# Desktop app lifecycle tests
+
+
+class TestDesktopDiscovery:
+    def test_env_var_override(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        fake_binary = tmp_path / "opencode-desktop"
+        fake_binary.write_text("fake")
+        monkeypatch.setenv(DESKTOP_BINARY_ENV_VAR, str(fake_binary))
+        result = discover_desktop_binary()
+        assert result == str(fake_binary)
+
+    def test_env_var_override_missing_file(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv(DESKTOP_BINARY_ENV_VAR, "/nonexistent/path/opencode-desktop")
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            discover_desktop_binary()
+
+    def test_known_path_found(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        fake_binary = tmp_path / "opencode-desktop"
+        fake_binary.write_text("fake")
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr(
+            "claude_teams.spawner.DESKTOP_PATHS",
+            {"linux": [str(fake_binary)]},
+        )
+        monkeypatch.delenv(DESKTOP_BINARY_ENV_VAR, raising=False)
+        result = discover_desktop_binary()
+        assert result == str(fake_binary)
+
+    def test_path_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr("claude_teams.spawner.DESKTOP_PATHS", {"linux": []})
+        monkeypatch.setattr(
+            "claude_teams.spawner.shutil.which",
+            lambda name: "/usr/local/bin/opencode-desktop" if name == "opencode-desktop" else None,
+        )
+        monkeypatch.delenv(DESKTOP_BINARY_ENV_VAR, raising=False)
+        result = discover_desktop_binary()
+        assert result == "/usr/local/bin/opencode-desktop"
+
+    def test_not_found_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr("claude_teams.spawner.DESKTOP_PATHS", {"linux": []})
+        monkeypatch.setattr("claude_teams.spawner.shutil.which", lambda name: None)
+        monkeypatch.delenv(DESKTOP_BINARY_ENV_VAR, raising=False)
+        with pytest.raises(FileNotFoundError, match="Could not find OpenCode Desktop"):
+            discover_desktop_binary()
+
+
+class TestDesktopLaunch:
+    def test_launch_returns_pid(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mock_popen = MagicMock()
+        mock_popen.pid = 12345
+        mock_popen_cls = MagicMock(return_value=mock_popen)
+        monkeypatch.setattr("claude_teams.spawner.subprocess.Popen", mock_popen_cls)
+        monkeypatch.setattr(sys, "platform", "linux")
+
+        result = launch_desktop_app("/usr/bin/opencode-desktop", "/tmp/project")
+        assert result == 12345
+        mock_popen_cls.assert_called_once_with(
+            ["/usr/bin/opencode-desktop"],
+            cwd="/tmp/project",
+            start_new_session=True,
+        )
+
+    def test_launch_windows_flags(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mock_popen = MagicMock()
+        mock_popen.pid = 99999
+        mock_popen_cls = MagicMock(return_value=mock_popen)
+        monkeypatch.setattr("claude_teams.spawner.subprocess.Popen", mock_popen_cls)
+        monkeypatch.setattr(sys, "platform", "win32")
+
+        result = launch_desktop_app("/usr/bin/opencode-desktop", "/tmp/project")
+        assert result == 99999
+        call_kwargs = mock_popen_cls.call_args[1]
+        expected_flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
+        assert call_kwargs["creationflags"] == expected_flags
+        assert "start_new_session" not in call_kwargs
+
+
+class TestProcessLifecycle:
+    def test_check_alive_with_running_process(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("claude_teams.spawner.os.kill", lambda pid, sig: None)
+        assert check_process_alive(1234) is True
+
+    def test_check_alive_with_dead_process(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def raise_os_error(pid: int, sig: int) -> None:
+            raise OSError("No such process")
+        monkeypatch.setattr("claude_teams.spawner.os.kill", raise_os_error)
+        assert check_process_alive(1234) is False
+
+    def test_check_alive_with_zero_pid(self) -> None:
+        assert check_process_alive(0) is False
+
+    def test_check_alive_with_negative_pid(self) -> None:
+        assert check_process_alive(-1) is False
+
+    def test_kill_desktop_process(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mock_kill = MagicMock()
+        monkeypatch.setattr("claude_teams.spawner.os.kill", mock_kill)
+        kill_desktop_process(5678)
+        mock_kill.assert_called_once_with(5678, signal.SIGTERM)
+
+    def test_kill_desktop_process_already_dead(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def raise_os_error(pid: int, sig: int) -> None:
+            raise OSError("No such process")
+        monkeypatch.setattr("claude_teams.spawner.os.kill", raise_os_error)
+        # Should not raise
+        kill_desktop_process(5678)
+
+    def test_kill_desktop_process_zero_pid(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        mock_kill = MagicMock()
+        monkeypatch.setattr("claude_teams.spawner.os.kill", mock_kill)
+        kill_desktop_process(0)
+        mock_kill.assert_not_called()
