@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import threading
 from pathlib import Path
 
@@ -164,6 +165,7 @@ def test_send_shutdown_request_with_reason(tmp_claude_dir):
     assert parsed["reason"] == "Done"
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="fcntl not available on Windows")
 def test_should_not_lose_message_appended_during_mark_as_read(tmp_claude_dir):
     import fcntl
 
