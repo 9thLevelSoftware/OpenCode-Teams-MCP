@@ -1,0 +1,497 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+import yaml
+
+from claude_teams.config_gen import (
+    generate_agent_config,
+    write_agent_config,
+    ensure_opencode_json,
+)
+
+
+class TestGenerateAgentConfig:
+    """Tests for generate_agent_config() - the markdown config builder."""
+
+    def test_returns_string(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+    def test_starts_with_frontmatter_delimiter(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        assert result.startswith("---\n")
+
+    def test_has_frontmatter_closing_delimiter(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        # Should have closing delimiter followed by body
+        assert "\n---\n\n" in result
+
+    def test_frontmatter_contains_mode_primary(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        frontmatter = self._extract_frontmatter(result)
+        assert frontmatter["mode"] == "primary"
+
+    def test_frontmatter_contains_model(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        frontmatter = self._extract_frontmatter(result)
+        assert frontmatter["model"] == "moonshot-ai/kimi-k2.5"
+
+    def test_frontmatter_permission_is_string_allow(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        frontmatter = self._extract_frontmatter(result)
+        assert frontmatter["permission"] == "allow"
+        assert isinstance(frontmatter["permission"], str)
+
+    def test_frontmatter_contains_tools_dict(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        frontmatter = self._extract_frontmatter(result)
+        assert "tools" in frontmatter
+        assert isinstance(frontmatter["tools"], dict)
+
+    def test_frontmatter_all_builtin_tools_enabled(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        frontmatter = self._extract_frontmatter(result)
+        tools = frontmatter["tools"]
+
+        # All builtin tools should be enabled
+        builtins = [
+            "read", "write", "edit", "bash", "glob", "grep",
+            "list", "webfetch", "websearch", "todoread", "todowrite"
+        ]
+        for tool in builtins:
+            assert tools[tool] is True
+
+    def test_frontmatter_claude_teams_tools_enabled(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        frontmatter = self._extract_frontmatter(result)
+        tools = frontmatter["tools"]
+
+        # claude-teams MCP tools should be enabled with wildcard
+        assert "claude-teams_*" in tools
+        assert tools["claude-teams_*"] is True
+
+    def test_body_contains_agent_name(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "**alice**" in body
+
+    def test_body_contains_team_name(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "**team1**" in body
+
+    def test_body_contains_agent_id(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "`alice@team1`" in body
+
+    def test_body_contains_color(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "blue" in body
+
+    def test_body_contains_inbox_polling_instructions(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "claude-teams_read_inbox" in body
+        assert "3-5 tool calls" in body
+
+    def test_body_contains_send_message_instructions(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "claude-teams_send_message" in body
+
+    def test_body_contains_task_list_instructions(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "claude-teams_task_list" in body
+
+    def test_body_contains_task_update_instructions(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "claude-teams_task_update" in body
+
+    def test_body_contains_status_values(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "in_progress" in body
+        assert "completed" in body
+
+    def test_body_contains_shutdown_protocol(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "shutdown_request" in body
+
+    def _extract_frontmatter(self, config: str) -> dict:
+        """Extract and parse YAML frontmatter."""
+        lines = config.split("\n")
+        assert lines[0] == "---"
+
+        # Find closing delimiter
+        end_idx = None
+        for i in range(1, len(lines)):
+            if lines[i] == "---":
+                end_idx = i
+                break
+
+        assert end_idx is not None, "No closing frontmatter delimiter found"
+
+        frontmatter_text = "\n".join(lines[1:end_idx])
+        return yaml.safe_load(frontmatter_text)
+
+    def _extract_body(self, config: str) -> str:
+        """Extract the body text after frontmatter."""
+        parts = config.split("\n---\n\n", 1)
+        assert len(parts) == 2, "Could not split frontmatter from body"
+        return parts[1]
+
+
+class TestWriteAgentConfig:
+    """Tests for write_agent_config() - writes config to .opencode/agents/<name>.md"""
+
+    def test_creates_agents_directory(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        config_content = "---\nmode: primary\n---\n\nTest config"
+
+        write_agent_config(project_dir, "alice", config_content)
+
+        agents_dir = project_dir / ".opencode" / "agents"
+        assert agents_dir.exists()
+        assert agents_dir.is_dir()
+
+    def test_writes_file_with_correct_name(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        config_content = "---\nmode: primary\n---\n\nTest config"
+
+        result_path = write_agent_config(project_dir, "alice", config_content)
+
+        expected = project_dir / ".opencode" / "agents" / "alice.md"
+        assert result_path == expected
+        assert result_path.exists()
+
+    def test_writes_correct_content(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        config_content = "---\nmode: primary\n---\n\nTest config"
+
+        result_path = write_agent_config(project_dir, "alice", config_content)
+
+        written_content = result_path.read_text(encoding="utf-8")
+        assert written_content == config_content
+
+    def test_overwrites_existing_file(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        # First write
+        config_v1 = "---\nmode: primary\n---\n\nVersion 1"
+        write_agent_config(project_dir, "alice", config_v1)
+
+        # Second write (re-spawn scenario)
+        config_v2 = "---\nmode: primary\n---\n\nVersion 2"
+        result_path = write_agent_config(project_dir, "alice", config_v2)
+
+        written_content = result_path.read_text(encoding="utf-8")
+        assert written_content == config_v2
+        assert "Version 1" not in written_content
+
+    def test_uses_utf8_encoding(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        # Config with unicode characters
+        config_content = "---\nmode: primary\n---\n\n你好世界 🚀"
+
+        result_path = write_agent_config(project_dir, "alice", config_content)
+
+        written_content = result_path.read_text(encoding="utf-8")
+        assert "你好世界" in written_content
+        assert "🚀" in written_content
+
+
+class TestEnsureOpencodeJson:
+    """Tests for ensure_opencode_json() - creates/merges opencode.json with MCP config."""
+
+    def test_creates_new_file_when_missing(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        result_path = ensure_opencode_json(
+            project_dir,
+            mcp_server_command="uv run claude-teams",
+        )
+
+        expected = project_dir / "opencode.json"
+        assert result_path == expected
+        assert result_path.exists()
+
+    def test_new_file_has_schema_key(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        result_path = ensure_opencode_json(
+            project_dir,
+            mcp_server_command="uv run claude-teams",
+        )
+
+        content = json.loads(result_path.read_text(encoding="utf-8"))
+        assert "$schema" in content
+
+    def test_new_file_has_mcp_section(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        result_path = ensure_opencode_json(
+            project_dir,
+            mcp_server_command="uv run claude-teams",
+        )
+
+        content = json.loads(result_path.read_text(encoding="utf-8"))
+        assert "mcp" in content
+        assert "claude-teams" in content["mcp"]
+
+    def test_mcp_entry_has_correct_structure(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        result_path = ensure_opencode_json(
+            project_dir,
+            mcp_server_command="uv run claude-teams",
+        )
+
+        content = json.loads(result_path.read_text(encoding="utf-8"))
+        mcp_entry = content["mcp"]["claude-teams"]
+
+        assert mcp_entry["type"] == "local"
+        assert mcp_entry["command"] == "uv run claude-teams"
+        assert mcp_entry["enabled"] is True
+
+    def test_mcp_entry_includes_environment_when_provided(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        env = {"DEBUG": "1", "MOONSHOT_API_KEY": "{env:MOONSHOT_API_KEY}"}
+
+        result_path = ensure_opencode_json(
+            project_dir,
+            mcp_server_command="uv run claude-teams",
+            mcp_server_env=env,
+        )
+
+        content = json.loads(result_path.read_text(encoding="utf-8"))
+        mcp_entry = content["mcp"]["claude-teams"]
+
+        assert "environment" in mcp_entry
+        assert mcp_entry["environment"] == env
+
+    def test_preserves_existing_config(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        # Create existing opencode.json with other config
+        opencode_json = project_dir / "opencode.json"
+        existing = {
+            "$schema": "custom-schema",
+            "mcp": {
+                "other-server": {
+                    "type": "local",
+                    "command": "other",
+                    "enabled": True,
+                }
+            },
+            "customKey": "customValue",
+        }
+        opencode_json.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+
+        result_path = ensure_opencode_json(
+            project_dir,
+            mcp_server_command="uv run claude-teams",
+        )
+
+        content = json.loads(result_path.read_text(encoding="utf-8"))
+
+        # Should preserve existing keys
+        assert content["$schema"] == "custom-schema"
+        assert content["customKey"] == "customValue"
+
+        # Should preserve existing MCP entries
+        assert "other-server" in content["mcp"]
+        assert content["mcp"]["other-server"]["command"] == "other"
+
+    def test_updates_existing_claude_teams_entry(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        # Create existing opencode.json with old claude-teams entry
+        opencode_json = project_dir / "opencode.json"
+        existing = {
+            "$schema": "schema",
+            "mcp": {
+                "claude-teams": {
+                    "type": "local",
+                    "command": "old-command",
+                    "enabled": False,
+                }
+            },
+        }
+        opencode_json.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+
+        result_path = ensure_opencode_json(
+            project_dir,
+            mcp_server_command="uv run claude-teams",
+        )
+
+        content = json.loads(result_path.read_text(encoding="utf-8"))
+
+        # Should update the entry
+        assert content["mcp"]["claude-teams"]["command"] == "uv run claude-teams"
+        assert content["mcp"]["claude-teams"]["enabled"] is True
+
+    def test_creates_mcp_section_if_missing(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        # Create existing opencode.json without mcp section
+        opencode_json = project_dir / "opencode.json"
+        existing = {
+            "$schema": "schema",
+            "someOtherKey": "value",
+        }
+        opencode_json.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+
+        result_path = ensure_opencode_json(
+            project_dir,
+            mcp_server_command="uv run claude-teams",
+        )
+
+        content = json.loads(result_path.read_text(encoding="utf-8"))
+
+        # Should add mcp section
+        assert "mcp" in content
+        assert "claude-teams" in content["mcp"]
+
+        # Should preserve existing keys
+        assert content["someOtherKey"] == "value"
