@@ -5,6 +5,11 @@
       "type": "local",
       "command": "uv run claude-teams",
       "enabled": true
+    },
+    "opencode-teams": {
+      "type": "local",
+      "command": "uv run opencode-teams",
+      "enabled": true
     }
   }
 }

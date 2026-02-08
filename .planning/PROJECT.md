@@ -73,8 +73,8 @@ Kimi K2.5 agents in OpenCode can coordinate as teams with shared task lists and 
 
 - **Runtime:** OpenCode CLI must be on PATH (v1.1.52+)
 - **Process:** Tmux for CLI spawning; desktop app for GUI spawning
-- **Persistence:** ~/.claude/ storage layout maintained for compatibility
-- **MCP:** Teammates must have claude-teams MCP server configured
+- **Persistence:** ~/.opencode-teams/ storage layout maintained for compatibility
+- **MCP:** Teammates must have opencode-teams MCP server configured
 - **Model:** Default to Kimi K2.5 via moonshot-ai provider
 
 ---

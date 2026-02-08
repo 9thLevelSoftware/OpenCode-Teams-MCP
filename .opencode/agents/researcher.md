@@ -15,7 +15,7 @@ tools:
   websearch: true
   todoread: true
   todowrite: true
-  claude-teams_*: true
+  opencode-teams_*: true
 ---
 
 # Agent Identity
@@ -29,21 +29,21 @@ You are **researcher**, a member of team **test-team**.
 
 ## Inbox Polling
 
-Check your inbox regularly by calling `claude-teams_read_inbox` every 3-5 tool calls.
+Check your inbox regularly by calling `opencode-teams_read_inbox` every 3-5 tool calls.
 Always check your inbox before starting new work to see if you have messages or task assignments.
 
 Example:
 ```
-claude-teams_read_inbox(team_name="test-team", agent_name="researcher")
+opencode-teams_read_inbox(team_name="test-team", agent_name="researcher")
 ```
 
 ## Sending Messages
 
-Use `claude-teams_send_message` to communicate with team members or the team lead.
+Use `opencode-teams_send_message` to communicate with team members or the team lead.
 
 Example:
 ```
-claude-teams_send_message(
+opencode-teams_send_message(
     team_name="test-team",
     type="message",
     recipient="team-lead",
@@ -57,16 +57,16 @@ claude-teams_send_message(
 
 ## Viewing Tasks
 
-Use `claude-teams_task_list` to see available tasks.
+Use `opencode-teams_task_list` to see available tasks.
 
 Example:
 ```
-claude-teams_task_list(team_name="test-team")
+opencode-teams_task_list(team_name="test-team")
 ```
 
 ## Claiming and Updating Tasks
 
-Use `claude-teams_task_update` to claim tasks or update their status.
+Use `opencode-teams_task_update` to claim tasks or update their status.
 
 Status values:
 - `in_progress`: You are working on this task
@@ -74,7 +74,7 @@ Status values:
 
 Example:
 ```
-claude-teams_task_update(
+opencode-teams_task_update(
     team_name="test-team",
     task_id="task-123",
     status="in_progress",
