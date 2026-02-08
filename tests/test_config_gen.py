@@ -241,6 +241,94 @@ class TestGenerateAgentConfig:
         body = self._extract_body(result)
         assert "shutdown_request" in body
 
+    def test_body_contains_available_mcp_tools_section(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "# Available MCP Tools" in body
+
+    def test_body_contains_all_key_tool_names(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        expected_tools = [
+            "opencode-teams_read_config",
+            "opencode-teams_server_status",
+            "opencode-teams_read_inbox",
+            "opencode-teams_send_message",
+            "opencode-teams_poll_inbox",
+            "opencode-teams_task_list",
+            "opencode-teams_task_get",
+            "opencode-teams_task_create",
+            "opencode-teams_task_update",
+            "opencode-teams_check_agent_health",
+            "opencode-teams_check_all_agents_health",
+            "opencode-teams_process_shutdown_approved",
+        ]
+        for tool in expected_tools:
+            assert tool in body, f"Missing tool: {tool}"
+
+    def test_body_contains_important_rules_section(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "# Important Rules" in body
+
+    def test_body_contains_guardrail_directives(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "Do NOT create your own coordination systems" in body
+        assert "Do NOT use slash commands or skills from other projects" in body
+
+    def test_body_contains_workflow_section(self) -> None:
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        assert "# Workflow" in body
+
+    def test_section_ordering(self) -> None:
+        """Verify sections appear in the correct order: Identity < Tools < Workflow < Rules < Shutdown."""
+        result = generate_agent_config(
+            agent_id="alice@team1",
+            name="alice",
+            team_name="team1",
+            color="blue",
+            model="moonshot-ai/kimi-k2.5",
+        )
+        body = self._extract_body(result)
+        identity_pos = body.index("# Agent Identity")
+        tools_pos = body.index("# Available MCP Tools")
+        workflow_pos = body.index("# Workflow")
+        rules_pos = body.index("# Important Rules")
+        shutdown_pos = body.index("# Shutdown Protocol")
+        assert identity_pos < tools_pos < workflow_pos < rules_pos < shutdown_pos
+
     def _extract_frontmatter(self, config: str) -> dict:
         """Extract and parse YAML frontmatter."""
         lines = config.split("\n")
@@ -281,7 +369,7 @@ class TestGenerateAgentConfigWithTemplate:
         assert "# Role: Researcher" in body
         assert "You focus on research." in body
 
-    def test_role_instructions_appear_before_communication_protocol(self) -> None:
+    def test_role_instructions_appear_before_workflow(self) -> None:
         result = generate_agent_config(
             agent_id="alice@team1",
             name="alice",
@@ -292,8 +380,8 @@ class TestGenerateAgentConfigWithTemplate:
         )
         body = self._extract_body(result)
         role_pos = body.index("# Role: Researcher")
-        comm_pos = body.index("# Communication Protocol")
-        assert role_pos < comm_pos
+        workflow_pos = body.index("# Workflow")
+        assert role_pos < workflow_pos
 
     def test_custom_instructions_injected_in_body(self) -> None:
         result = generate_agent_config(
@@ -336,7 +424,7 @@ class TestGenerateAgentConfigWithTemplate:
         custom_pos = body.index("# Additional Instructions")
         assert role_pos < custom_pos
 
-    def test_custom_instructions_appear_before_communication_protocol(self) -> None:
+    def test_custom_instructions_appear_before_workflow(self) -> None:
         result = generate_agent_config(
             agent_id="alice@team1",
             name="alice",
@@ -347,8 +435,8 @@ class TestGenerateAgentConfigWithTemplate:
         )
         body = self._extract_body(result)
         custom_pos = body.index("# Additional Instructions")
-        comm_pos = body.index("# Communication Protocol")
-        assert custom_pos < comm_pos
+        workflow_pos = body.index("# Workflow")
+        assert custom_pos < workflow_pos
 
     def test_no_template_preserves_existing_behavior(self) -> None:
         result = generate_agent_config(
@@ -361,8 +449,9 @@ class TestGenerateAgentConfigWithTemplate:
         body = self._extract_body(result)
         # Should still have all existing sections
         assert "# Agent Identity" in body
-        assert "# Communication Protocol" in body
-        assert "# Task Management" in body
+        assert "# Available MCP Tools" in body
+        assert "# Workflow" in body
+        assert "# Important Rules" in body
         assert "# Shutdown Protocol" in body
         # Should NOT contain template-specific content
         assert "# Additional Instructions" not in body

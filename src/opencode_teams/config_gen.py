@@ -80,78 +80,66 @@ def generate_agent_config(
         - Agent ID: `{agent_id}`
         - Color: {color}"""))
 
-    # Section 2: Role instructions (from template, if provided)
+    # Section 2: Available MCP Tools
+    body_parts.append(textwrap.dedent(f"""\
+        # Available MCP Tools
+
+        You MUST use these `opencode-teams_*` MCP tools for all team coordination.
+        Do NOT invent custom workflows, scripts, or coordination frameworks.
+
+        **Team Coordination:**
+        - `opencode-teams_read_config` — read team configuration
+        - `opencode-teams_server_status` — check MCP server status
+
+        **Messaging:**
+        - `opencode-teams_read_inbox` — check your inbox for messages
+        - `opencode-teams_send_message` — send a message to a teammate or team-lead
+        - `opencode-teams_poll_inbox` — long-poll for new messages
+
+        **Task Management:**
+        - `opencode-teams_task_list` — list all tasks for the team
+        - `opencode-teams_task_get` — get details of a specific task
+        - `opencode-teams_task_create` — create a new task
+        - `opencode-teams_task_update` — update task status or claim a task
+
+        **Lifecycle:**
+        - `opencode-teams_check_agent_health` — check health of a single agent
+        - `opencode-teams_check_all_agents_health` — check health of all agents
+        - `opencode-teams_process_shutdown_approved` — acknowledge shutdown"""))
+
+    # Section 3: Role instructions (from template, if provided)
     if role_instructions:
         body_parts.append(role_instructions.strip())
 
-    # Section 3: Custom instructions (user per-spawn customization, if provided)
+    # Section 4: Custom instructions (user per-spawn customization, if provided)
     if custom_instructions:
         body_parts.append(
             f"# Additional Instructions\n\n{custom_instructions.strip()}"
         )
 
-    # Section 4: Communication Protocol
+    # Section 5: Workflow
     body_parts.append(textwrap.dedent(f"""\
-        # Communication Protocol
+        # Workflow
 
-        ## Inbox Polling
+        Follow this loop while working:
 
-        Check your inbox regularly by calling `opencode-teams_read_inbox` every 3-5 tool calls.
-        Always check your inbox before starting new work to see if you have messages or task assignments.
+        1. **Check inbox** — call `opencode-teams_read_inbox(team_name="{team_name}", agent_name="{name}")` every 3-5 tool calls. Always check before starting new work.
+        2. **Check tasks** — call `opencode-teams_task_list(team_name="{team_name}")` to find available tasks. Claim one with `opencode-teams_task_update(team_name="{team_name}", task_id="<id>", status="in_progress", owner="{name}")`.
+        3. **Do the work** — use your tools to complete the task.
+        4. **Report progress** — send updates to team-lead via `opencode-teams_send_message(team_name="{team_name}", type="message", recipient="team-lead", content="<update>", summary="<short>", sender="{name}")`.
+        5. **Mark done** — call `opencode-teams_task_update(team_name="{team_name}", task_id="<id>", status="completed", owner="{name}")` when finished."""))
 
-        Example:
-        ```
-        opencode-teams_read_inbox(team_name="{team_name}", agent_name="{name}")
-        ```
+    # Section 6: Important Rules
+    body_parts.append(textwrap.dedent("""\
+        # Important Rules
 
-        ## Sending Messages
+        - Use `opencode-teams_*` MCP tools for ALL team communication and task management
+        - Do NOT create your own coordination systems, parallel agent frameworks, or orchestration patterns
+        - Do NOT use slash commands or skills from other projects for team coordination
+        - Focus on your assigned task — report to team-lead when done or blocked
+        - When uncertain, ask team-lead via `opencode-teams_send_message` rather than improvising"""))
 
-        Use `opencode-teams_send_message` to communicate with team members or the team lead.
-
-        Example:
-        ```
-        opencode-teams_send_message(
-            team_name="{team_name}",
-            type="message",
-            recipient="team-lead",
-            content="Status update: task completed",
-            summary="status update",
-            sender="{name}"
-        )
-        ```"""))
-
-    # Section 5: Task Management
-    body_parts.append(textwrap.dedent(f"""\
-        # Task Management
-
-        ## Viewing Tasks
-
-        Use `opencode-teams_task_list` to see available tasks.
-
-        Example:
-        ```
-        opencode-teams_task_list(team_name="{team_name}")
-        ```
-
-        ## Claiming and Updating Tasks
-
-        Use `opencode-teams_task_update` to claim tasks or update their status.
-
-        Status values:
-        - `in_progress`: You are working on this task
-        - `completed`: Task is finished
-
-        Example:
-        ```
-        opencode-teams_task_update(
-            team_name="{team_name}",
-            task_id="task-123",
-            status="in_progress",
-            owner="{name}"
-        )
-        ```"""))
-
-    # Section 6: Shutdown Protocol
+    # Section 7: Shutdown Protocol
     body_parts.append(textwrap.dedent("""\
         # Shutdown Protocol
 

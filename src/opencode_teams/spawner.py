@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -315,43 +316,45 @@ def build_windows_terminal_command(
     Returns:
         Command list for subprocess.Popen.
     """
-    # Escape prompt for PowerShell (double quotes and backticks)
-    escaped_prompt = member.prompt.replace('"', '`"').replace("'", "''")
+    # Escape single quotes for PowerShell single-quoted strings (' → '')
+    escaped_prompt = member.prompt.replace("'", "''")
+    escaped_cwd = member.cwd.replace("'", "''")
+    escaped_binary = opencode_binary.replace("'", "''")
 
-    # PowerShell command that:
+    # PowerShell script that:
     # 1. Changes to the working directory
     # 2. Runs opencode directly (not via Start-Process)
     # 3. Always keeps window open for debugging
-    ps_script = f"""
-$ErrorActionPreference = 'Continue'
-Set-Location -Path '{member.cwd}'
-$title = '[OpenCode] {member.name}'
-$host.UI.RawUI.WindowTitle = $title
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "OpenCode Agent: {member.name}" -ForegroundColor Cyan
-Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Model: {member.model}" -ForegroundColor Gray
-Write-Host "Working directory: {member.cwd}" -ForegroundColor Gray
-Write-Host ""
-Write-Host "Starting opencode run..." -ForegroundColor Yellow
-Write-Host ""
+    ps_script = (
+        "$ErrorActionPreference = 'Continue'\n"
+        f"Set-Location -Path '{escaped_cwd}'\n"
+        f"$title = '[OpenCode] {member.name}'\n"
+        "$host.UI.RawUI.WindowTitle = $title\n"
+        "Write-Host '========================================' -ForegroundColor Cyan\n"
+        f"Write-Host 'OpenCode Agent: {member.name}' -ForegroundColor Cyan\n"
+        "Write-Host '========================================' -ForegroundColor Cyan\n"
+        f"Write-Host 'Model: {member.model}' -ForegroundColor Gray\n"
+        f"Write-Host 'Working directory: {escaped_cwd}' -ForegroundColor Gray\n"
+        "Write-Host ''\n"
+        "Write-Host 'Starting opencode run...' -ForegroundColor Yellow\n"
+        "Write-Host ''\n"
+        f"& '{escaped_binary}' run --agent '{member.name}' --model '{member.model}' '{escaped_prompt}'\n"
+        "$exitCode = $LASTEXITCODE\n"
+        "Write-Host ''\n"
+        "Write-Host '========================================' -ForegroundColor Yellow\n"
+        "Write-Host ('Agent exited with code: ' + $exitCode) -ForegroundColor Yellow\n"
+        "Write-Host 'Press any key to close this window...' -ForegroundColor Gray\n"
+        "$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')"
+    )
 
-# Run opencode directly so output shows in this window
-& '{opencode_binary}' run --agent '{member.name}' --model '{member.model}' '{escaped_prompt}'
-$exitCode = $LASTEXITCODE
-
-Write-Host ""
-Write-Host "========================================" -ForegroundColor Yellow
-Write-Host "Agent exited with code: $exitCode" -ForegroundColor Yellow
-Write-Host "Press any key to close this window..." -ForegroundColor Gray
-$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-"""
+    # Encode as UTF-16LE → Base64 to bypass all command-line escaping issues
+    encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
 
     return [
         "powershell.exe",
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
-        "-Command", ps_script.strip(),
+        "-EncodedCommand", encoded,
     ]
 
 
@@ -374,15 +377,14 @@ def spawn_windows_terminal(
     """
     cmd = build_windows_terminal_command(member, opencode_binary, timeout_seconds)
 
-    # Use subprocess.Popen with CREATE_NEW_CONSOLE to spawn in a new visible window
+    # Use subprocess.Popen with CREATE_NEW_CONSOLE to spawn in a new visible window.
+    # Do NOT redirect stdin/stdout/stderr — with CREATE_NEW_CONSOLE, the new console
+    # provides its own handles. Explicit DEVNULL would suppress output from child
+    # processes (e.g. opencode run).
     proc = subprocess.Popen(
         cmd,
         cwd=member.cwd,
         creationflags=subprocess.CREATE_NEW_CONSOLE,
-        # Don't capture output - let it show in the new window
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
     )
 
     return proc.pid

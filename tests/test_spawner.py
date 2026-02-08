@@ -15,6 +15,7 @@ from opencode_teams.models import AgentHealthStatus, COLOR_PALETTE, TeammateMemb
 from opencode_teams.spawner import (
     assign_color,
     build_opencode_run_command,
+    build_windows_terminal_command,
     capture_pane_content_hash,
     check_pane_alive,
     check_process_alive,
@@ -372,8 +373,8 @@ class TestSpawnWithTemplate:
         # Role instructions should appear before custom instructions
         role_pos = content.index("# Role: Tester")
         custom_pos = content.index("# Additional Instructions")
-        comm_pos = content.index("# Communication Protocol")
-        assert role_pos < custom_pos < comm_pos
+        workflow_pos = content.index("# Workflow")
+        assert role_pos < custom_pos < workflow_pos
 
 
 class TestKillTmuxPane:
@@ -1154,3 +1155,82 @@ class TestCleanupAgentConfigReExport:
         cleanup_agent_config(tmp_path, "test-agent")
 
         assert not config_file.exists()
+
+
+class TestBuildWindowsTerminalCommand:
+    """Tests for build_windows_terminal_command using -EncodedCommand."""
+
+    def test_uses_encoded_command_not_command(self) -> None:
+        member = _make_opencode_member()
+        cmd = build_windows_terminal_command(member, "C:\\bin\\opencode.exe")
+        assert "-EncodedCommand" in cmd
+        assert "-Command" not in cmd
+
+    def test_command_starts_with_powershell(self) -> None:
+        member = _make_opencode_member()
+        cmd = build_windows_terminal_command(member, "C:\\bin\\opencode.exe")
+        assert cmd[0] == "powershell.exe"
+        assert "-NoProfile" in cmd
+        assert "-ExecutionPolicy" in cmd
+        assert "Bypass" in cmd
+
+    def test_encoded_script_decodes_to_expected_content(self) -> None:
+        import base64
+        member = _make_opencode_member(
+            name="researcher", model="moonshot-ai/kimi-k2.5",
+            cwd="/tmp", prompt="Do research",
+        )
+        cmd = build_windows_terminal_command(member, "/usr/local/bin/opencode")
+        encoded_idx = cmd.index("-EncodedCommand") + 1
+        encoded = cmd[encoded_idx]
+
+        # Decode: Base64 → UTF-16LE → str
+        script = base64.b64decode(encoded).decode("utf-16-le")
+
+        # Verify key parts of the script
+        assert "Set-Location -Path '/tmp'" in script
+        assert "OpenCode Agent: researcher" in script
+        assert "'/usr/local/bin/opencode' run" in script
+        assert "--agent 'researcher'" in script
+        assert "--model 'moonshot-ai/kimi-k2.5'" in script
+        assert "'Do research'" in script
+        assert "ReadKey" in script
+
+    def test_prompt_with_single_quotes_escaped(self) -> None:
+        import base64
+        member = _make_opencode_member(prompt="Fix 'main.py' bugs")
+        cmd = build_windows_terminal_command(member, "/usr/local/bin/opencode")
+        encoded_idx = cmd.index("-EncodedCommand") + 1
+        script = base64.b64decode(cmd[encoded_idx]).decode("utf-16-le")
+
+        # Single quotes should be doubled for PS single-quoted strings
+        assert "'Fix ''main.py'' bugs'" in script
+
+    def test_prompt_with_double_quotes(self) -> None:
+        import base64
+        member = _make_opencode_member(prompt='Use "$HOME" variable')
+        cmd = build_windows_terminal_command(member, "/usr/local/bin/opencode")
+        encoded_idx = cmd.index("-EncodedCommand") + 1
+        script = base64.b64decode(cmd[encoded_idx]).decode("utf-16-le")
+
+        # Double quotes should pass through untouched (inside single-quoted PS string)
+        assert '"$HOME"' in script
+
+    def test_prompt_with_newlines(self) -> None:
+        import base64
+        member = _make_opencode_member(prompt="Line 1\nLine 2\nLine 3")
+        cmd = build_windows_terminal_command(member, "/usr/local/bin/opencode")
+        encoded_idx = cmd.index("-EncodedCommand") + 1
+        script = base64.b64decode(cmd[encoded_idx]).decode("utf-16-le")
+
+        # Newlines should be preserved in the encoded script
+        assert "Line 1\nLine 2\nLine 3" in script
+
+    def test_cwd_with_spaces_escaped(self) -> None:
+        import base64
+        member = _make_opencode_member(cwd="C:\\Users\\John Doe\\Projects")
+        cmd = build_windows_terminal_command(member, "/usr/local/bin/opencode")
+        encoded_idx = cmd.index("-EncodedCommand") + 1
+        script = base64.b64decode(cmd[encoded_idx]).decode("utf-16-le")
+
+        assert "C:\\Users\\John Doe\\Projects" in script
