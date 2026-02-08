@@ -109,6 +109,7 @@ DESKTOP_PATHS: dict[str, list[str]] = {
         str(Path.home() / "Applications/OpenCode Desktop.app/Contents/MacOS/OpenCode Desktop"),
     ],
     "win32": [
+        str(Path.home() / "AppData/Local/OpenCode/OpenCode.exe"),
         str(Path.home() / "AppData/Local/Programs/opencode-desktop/opencode-desktop.exe"),
         str(Path.home() / "AppData/Local/opencode-desktop/opencode-desktop.exe"),
     ],
@@ -120,7 +121,7 @@ DESKTOP_PATHS: dict[str, list[str]] = {
 
 DESKTOP_BINARY_NAMES: dict[str, list[str]] = {
     "darwin": ["opencode-desktop"],
-    "win32": ["opencode-desktop.exe", "opencode-desktop"],
+    "win32": ["OpenCode.exe", "opencode-desktop.exe", "opencode-desktop"],
     "linux": ["opencode-desktop", "OpenCode-Desktop.AppImage"],
 }
 
@@ -204,57 +205,66 @@ def spawn_teammate(
 
     teams.add_member(team_name, member, base_dir)
 
-    messaging.ensure_inbox(team_name, name, base_dir)
-    initial_msg = InboxMessage(
-        from_="team-lead",
-        text=prompt,
-        timestamp=messaging.now_iso(),
-        read=False,
-    )
-    messaging.append_message(team_name, name, initial_msg, base_dir)
-
-    # Generate agent config for OpenCode
-    project = project_dir or Path.cwd()
-    config_content = generate_agent_config(
-        agent_id=member.agent_id,
-        name=name,
-        team_name=team_name,
-        color=color,
-        model=model,
-        role_instructions=role_instructions,
-        custom_instructions=custom_instructions,
-    )
-    write_agent_config(project, name, config_content)
-    ensure_opencode_json(project, mcp_server_command="uv run opencode-teams")
-
-    if backend_type == "desktop":
-        if not desktop_binary:
-            raise ValueError("desktop_binary is required when backend_type='desktop'")
-        pid = launch_desktop_app(desktop_binary, member.cwd)
-        config = teams.read_config(team_name, base_dir)
-        for m in config.members:
-            if isinstance(m, TeammateMember) and m.name == name:
-                m.process_id = pid
-                m.backend_type = "desktop"
-                break
-        teams.write_config(team_name, config, base_dir)
-        member.process_id = pid
-    else:
-        cmd = build_opencode_run_command(member, opencode_binary)
-        result = subprocess.run(
-            ["tmux", "split-window", "-dP", "-F", "#{pane_id}", cmd],
-            capture_output=True,
-            text=True,
-            check=True,
+    try:
+        messaging.ensure_inbox(team_name, name, base_dir)
+        initial_msg = InboxMessage(
+            from_="team-lead",
+            text=prompt,
+            timestamp=messaging.now_iso(),
+            read=False,
         )
-        pane_id = result.stdout.strip()
-        config = teams.read_config(team_name, base_dir)
-        for m in config.members:
-            if isinstance(m, TeammateMember) and m.name == name:
-                m.tmux_pane_id = pane_id
-                break
-        teams.write_config(team_name, config, base_dir)
-        member.tmux_pane_id = pane_id
+        messaging.append_message(team_name, name, initial_msg, base_dir)
+
+        # Generate agent config for OpenCode
+        project = project_dir or Path.cwd()
+        config_content = generate_agent_config(
+            agent_id=member.agent_id,
+            name=name,
+            team_name=team_name,
+            color=color,
+            model=model,
+            role_instructions=role_instructions,
+            custom_instructions=custom_instructions,
+        )
+        write_agent_config(project, name, config_content)
+        ensure_opencode_json(project, mcp_server_command="uv run opencode-teams")
+
+        if backend_type == "desktop":
+            if not desktop_binary:
+                raise ValueError("desktop_binary is required when backend_type='desktop'")
+            pid = launch_desktop_app(desktop_binary, member.cwd)
+            config = teams.read_config(team_name, base_dir)
+            for m in config.members:
+                if isinstance(m, TeammateMember) and m.name == name:
+                    m.process_id = pid
+                    m.backend_type = "desktop"
+                    break
+            teams.write_config(team_name, config, base_dir)
+            member.process_id = pid
+        else:
+            cmd = build_opencode_run_command(member, opencode_binary)
+            result = subprocess.run(
+                ["tmux", "split-window", "-dP", "-F", "#{pane_id}", cmd],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            pane_id = result.stdout.strip()
+            config = teams.read_config(team_name, base_dir)
+            for m in config.members:
+                if isinstance(m, TeammateMember) and m.name == name:
+                    m.tmux_pane_id = pane_id
+                    break
+            teams.write_config(team_name, config, base_dir)
+            member.tmux_pane_id = pane_id
+
+    except Exception:
+        # Rollback: remove member from config if spawn fails
+        try:
+            teams.remove_member(team_name, name, base_dir)
+        except Exception:
+            pass  # Best effort cleanup
+        raise
 
     return member
 
