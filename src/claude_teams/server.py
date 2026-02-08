@@ -28,6 +28,7 @@ from claude_teams.spawner import (
     spawn_teammate,
     translate_model,
 )
+from claude_teams.templates import TEMPLATES, get_template, list_templates
 
 
 @lifespan
@@ -87,14 +88,29 @@ def spawn_teammate_tool(
     prompt: str,
     ctx: Context,
     model: str = "sonnet",  # Accepts: "sonnet", "opus", "haiku", or "provider/model"
-    subagent_type: str = "general-purpose",
+    template: str = "",  # "researcher", "implementer", "reviewer", "tester", or "" for generic
+    custom_instructions: str = "",  # Additional system prompt instructions to customize the agent
     plan_mode_required: bool = False,
 ) -> dict:
     """Spawn a new OpenCode teammate in a tmux pane. The teammate receives
     its initial prompt via inbox and begins working autonomously. Names must
-    be unique within the team."""
+    be unique within the team. Use template parameter to assign a role
+    (researcher, implementer, reviewer, tester) with role-specific system
+    prompt instructions. Use custom_instructions to add additional system prompt
+    text that customizes the agent beyond the template. Use list_agent_templates
+    to see available templates."""
     ls = _get_lifespan(ctx)
     resolved_model = translate_model(model, provider=ls.get("provider", "moonshot-ai"))
+
+    # Template lookup
+    role_instructions = ""
+    if template:
+        tmpl = get_template(template)
+        if tmpl is None:
+            available = ", ".join(sorted(TEMPLATES.keys()))
+            raise ToolError(f"Unknown template: {template!r}. Available: {available}")
+        role_instructions = tmpl.role_instructions
+
     member = spawn_teammate(
         team_name=team_name,
         name=name,
@@ -102,7 +118,9 @@ def spawn_teammate_tool(
         opencode_binary=ls["opencode_binary"],
         lead_session_id=ls["session_id"],
         model=resolved_model,
-        subagent_type=subagent_type,
+        subagent_type=template or "general-purpose",
+        role_instructions=role_instructions,
+        custom_instructions=custom_instructions,
         plan_mode_required=plan_mode_required,
         project_dir=Path.cwd(),
     )
@@ -111,6 +129,14 @@ def spawn_teammate_tool(
         name=member.name,
         team_name=team_name,
     ).model_dump()
+
+
+@mcp.tool
+def list_agent_templates() -> list[dict]:
+    """List all available agent templates with their name and description.
+    Templates provide role-specific system prompts for spawned agents.
+    Use the template name with spawn_teammate's template parameter."""
+    return list_templates()
 
 
 @mcp.tool

@@ -582,6 +582,118 @@ class TestModelTranslationWiring:
                 assert call_kwargs.kwargs.get("model") == "openrouter/moonshotai/kimi-k2.5"
 
 
+class TestListAgentTemplates:
+    async def test_returns_all_four_templates(self, client: Client):
+        result = _data(await client.call_tool("list_agent_templates", {}))
+        assert len(result) >= 4
+        names = {t["name"] for t in result}
+        assert {"researcher", "implementer", "reviewer", "tester"} <= names
+        for t in result:
+            assert "name" in t
+            assert "description" in t
+
+    async def test_returns_list_of_dicts(self, client: Client):
+        result = _data(await client.call_tool("list_agent_templates", {}))
+        assert isinstance(result, list)
+        for entry in result:
+            assert isinstance(entry, dict)
+
+
+class TestSpawnWithTemplateTool:
+    async def test_spawn_with_researcher_template(self, client: Client):
+        await client.call_tool("team_create", {"team_name": "tpl1"})
+        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn:
+            mock_spawn.return_value = TeammateMember(
+                agent_id="worker@tpl1", name="worker", agent_type="researcher",
+                model="moonshot-ai/kimi-k2.5", prompt="do research", color="blue",
+                joined_at=0, tmux_pane_id="%1", cwd="/tmp",
+            )
+            await client.call_tool("spawn_teammate", {
+                "team_name": "tpl1", "name": "worker", "prompt": "do research",
+                "template": "researcher",
+            })
+            call_kwargs = mock_spawn.call_args.kwargs
+            assert "# Role: Researcher" in call_kwargs["role_instructions"]
+            assert call_kwargs["subagent_type"] == "researcher"
+
+    async def test_spawn_with_custom_instructions(self, client: Client):
+        await client.call_tool("team_create", {"team_name": "tpl2"})
+        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn:
+            mock_spawn.return_value = TeammateMember(
+                agent_id="worker@tpl2", name="worker", agent_type="general-purpose",
+                model="moonshot-ai/kimi-k2.5", prompt="do work", color="blue",
+                joined_at=0, tmux_pane_id="%1", cwd="/tmp",
+            )
+            await client.call_tool("spawn_teammate", {
+                "team_name": "tpl2", "name": "worker", "prompt": "do work",
+                "custom_instructions": "Focus on Python",
+            })
+            call_kwargs = mock_spawn.call_args.kwargs
+            assert call_kwargs["custom_instructions"] == "Focus on Python"
+
+    async def test_spawn_with_template_and_custom_instructions(self, client: Client):
+        await client.call_tool("team_create", {"team_name": "tpl3"})
+        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn:
+            mock_spawn.return_value = TeammateMember(
+                agent_id="worker@tpl3", name="worker", agent_type="tester",
+                model="moonshot-ai/kimi-k2.5", prompt="test stuff", color="blue",
+                joined_at=0, tmux_pane_id="%1", cwd="/tmp",
+            )
+            await client.call_tool("spawn_teammate", {
+                "team_name": "tpl3", "name": "worker", "prompt": "test stuff",
+                "template": "tester", "custom_instructions": "Also check performance",
+            })
+            call_kwargs = mock_spawn.call_args.kwargs
+            assert "# Role: Tester" in call_kwargs["role_instructions"]
+            assert call_kwargs["custom_instructions"] == "Also check performance"
+
+    async def test_spawn_with_unknown_template_raises_error(self, client: Client):
+        await client.call_tool("team_create", {"team_name": "tpl4"})
+        result = await client.call_tool(
+            "spawn_teammate",
+            {"team_name": "tpl4", "name": "worker", "prompt": "do work",
+             "template": "nonexistent"},
+            raise_on_error=False,
+        )
+        assert result.is_error is True
+        text = result.content[0].text
+        assert "Unknown template" in text
+        assert "nonexistent" in text
+        # Should list available templates
+        assert "researcher" in text
+        assert "implementer" in text
+
+    async def test_spawn_without_template_uses_general_purpose(self, client: Client):
+        await client.call_tool("team_create", {"team_name": "tpl5"})
+        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn:
+            mock_spawn.return_value = TeammateMember(
+                agent_id="worker@tpl5", name="worker", agent_type="general-purpose",
+                model="moonshot-ai/kimi-k2.5", prompt="do work", color="blue",
+                joined_at=0, tmux_pane_id="%1", cwd="/tmp",
+            )
+            await client.call_tool("spawn_teammate", {
+                "team_name": "tpl5", "name": "worker", "prompt": "do work",
+            })
+            call_kwargs = mock_spawn.call_args.kwargs
+            assert call_kwargs["subagent_type"] == "general-purpose"
+            assert call_kwargs["role_instructions"] == ""
+
+    async def test_spawn_template_sets_subagent_type(self, client: Client):
+        await client.call_tool("team_create", {"team_name": "tpl6"})
+        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn:
+            mock_spawn.return_value = TeammateMember(
+                agent_id="worker@tpl6", name="worker", agent_type="tester",
+                model="moonshot-ai/kimi-k2.5", prompt="test", color="blue",
+                joined_at=0, tmux_pane_id="%1", cwd="/tmp",
+            )
+            await client.call_tool("spawn_teammate", {
+                "team_name": "tpl6", "name": "worker", "prompt": "test",
+                "template": "tester",
+            })
+            call_kwargs = mock_spawn.call_args.kwargs
+            assert call_kwargs["subagent_type"] == "tester"
+
+
 class TestConfigCleanup:
     """Tests for config cleanup integration in server lifecycle operations."""
 
