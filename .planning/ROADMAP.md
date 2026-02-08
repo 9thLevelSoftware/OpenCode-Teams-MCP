@@ -121,11 +121,11 @@ Plans:
   1. The system can launch the OpenCode desktop app with the correct agent configuration
   2. Desktop spawning works on Windows, macOS, and Linux (platform-appropriate launch commands)
   3. The system tracks the desktop process ID and can use it for lifecycle management (status check, termination)
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 07-01: Desktop app discovery and cross-platform launch commands
-- [ ] 07-02: Desktop process tracking and lifecycle management
+- [ ] 07-01-PLAN.md -- Desktop binary discovery, process launch/liveness/kill functions, TeammateMember process_id field
+- [ ] 07-02-PLAN.md -- Wire desktop backend into spawn flow, MCP tools, force_kill branching, health check branching
 
 ### Phase 8: Legacy Cleanup
 **Goal**: All Claude Code-specific code is removed, all tests pass against the new OpenCode spawning, and documentation reflects the current system
