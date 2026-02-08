@@ -19,7 +19,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 5: Agent Health & Monitoring** - Detect dead/hung agents and force-kill unresponsive instances ✓
 - [x] **Phase 6: Agent Templates** - Pre-built role templates for common agent specializations ✓
 - [x] **Phase 7: Desktop Spawning** - Support launching OpenCode desktop app as an alternative to CLI ✓
-- [ ] **Phase 8: Legacy Cleanup** - Remove all Claude Code-specific code paths, update tests and documentation
+- [x] **Phase 8: Legacy Cleanup** - Remove all Claude Code-specific code paths, update tests and documentation ✓
 
 ## Phase Details
 
@@ -137,13 +137,11 @@ Plans:
   3. No references to Claude Code CLI flags remain anywhere in the codebase (grep for `--agent-id`, `--team-name`, `--parent-session-id` returns zero results)
   4. All existing tests pass with OpenCode spawning (no tests reference Claude-specific behavior)
   5. README and documentation describe OpenCode + Kimi K2.5 setup, not Claude Code setup
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 08-01: Remove Claude Code discovery and command building functions
-- [ ] 08-02: Remove Claude Code CLI flag references throughout codebase
-- [ ] 08-03: Update all tests for OpenCode spawning
-- [ ] 08-04: Update README and documentation
+- [x] 08-01-PLAN.md -- Remove discover_claude_binary, build_spawn_command, and dead lead_session_id parameter ✓
+- [x] 08-02-PLAN.md -- Update Claude model strings to Kimi K2.5 and rewrite README/documentation for OpenCode ✓
 
 ## Progress
 
@@ -159,8 +157,9 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 5. Agent Health & Monitoring | 2/2 | ✓ Complete | 2026-02-08 |
 | 6. Agent Templates | 2/2 | ✓ Complete | 2026-02-08 |
 | 7. Desktop Spawning | 2/2 | ✓ Complete | 2026-02-08 |
-| 8. Legacy Cleanup | 0/4 | Not started | - |
+| 8. Legacy Cleanup | 2/2 | ✓ Complete | 2026-02-08 |
 
 ---
 *Roadmap created: 2026-02-07*
-*Depth: comprehensive (8 phases, 17 plans)*
+*Depth: comprehensive (8 phases, 15 plans)*
+*Milestone complete: 2026-02-08*
