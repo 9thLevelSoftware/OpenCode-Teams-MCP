@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import shlex
 import shutil
 import subprocess
@@ -9,6 +10,79 @@ from pathlib import Path
 from claude_teams import messaging, teams
 from claude_teams.models import COLOR_PALETTE, InboxMessage, TeammateMember
 from claude_teams.teams import _VALID_NAME_RE
+
+
+# OpenCode binary discovery and configuration constants
+MINIMUM_OPENCODE_VERSION = (1, 1, 52)
+DEFAULT_PROVIDER = "moonshot-ai"
+
+# Kimi K2.5 is the only supported model; all Claude aliases are equivalent
+MODEL_ALIASES: dict[str, str] = {
+    "sonnet": "kimi-k2.5",
+    "opus": "kimi-k2.5",
+    "haiku": "kimi-k2.5",
+}
+
+PROVIDER_MODEL_MAP: dict[str, str] = {
+    "moonshot-ai": "moonshot-ai/kimi-k2.5",
+    "moonshot-ai-china": "moonshot-ai-china/kimi-k2.5",
+    "openrouter": "openrouter/moonshotai/kimi-k2.5",  # Note: no hyphen in moonshotai
+    "novita": "novita/moonshotai/kimi-k2.5",
+}
+
+PROVIDER_CONFIGS: dict[str, dict] = {
+    "moonshot-ai": {
+        "apiKey": "{env:MOONSHOT_API_KEY}",
+        "models": {
+            "kimi-k2.5": {
+                "contextWindow": 128000,
+                "maxOutputTokens": 16384,
+            },
+        },
+    },
+    "moonshot-ai-china": {
+        "apiKey": "{env:MOONSHOT_API_KEY}",
+        "options": {
+            "baseURL": "https://api.moonshot.cn/v1",
+        },
+        "models": {
+            "kimi-k2.5": {
+                "contextWindow": 128000,
+                "maxOutputTokens": 16384,
+            },
+        },
+    },
+    "openrouter": {
+        "apiKey": "{env:OPENROUTER_API_KEY}",
+        "models": {
+            "moonshotai/kimi-k2.5": {
+                "contextWindow": 128000,
+                "maxOutputTokens": 16384,
+            },
+        },
+    },
+    "novita": {
+        "npm": "@opencode/provider-novita",
+        "name": "Novita AI",
+        "apiKey": "{env:NOVITA_API_KEY}",
+        "options": {
+            "baseURL": "https://api.novita.ai/openai",
+        },
+        "models": {
+            "moonshotai/kimi-k2.5": {
+                "contextWindow": 128000,
+                "maxOutputTokens": 16384,
+            },
+        },
+    },
+}
+
+_PROVIDER_ENV_VARS: dict[str, str] = {
+    "moonshot-ai": "MOONSHOT_API_KEY",
+    "moonshot-ai-china": "MOONSHOT_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+    "novita": "NOVITA_API_KEY",
+}
 
 
 def discover_claude_binary() -> str:
@@ -121,3 +195,140 @@ def spawn_teammate(
 
 def kill_tmux_pane(pane_id: str) -> None:
     subprocess.run(["tmux", "kill-pane", "-t", pane_id], check=False)
+
+
+# OpenCode binary discovery and configuration functions
+
+
+def discover_opencode_binary() -> str:
+    """Discover the opencode binary on PATH and validate its version.
+
+    Returns:
+        Path to the opencode binary.
+
+    Raises:
+        FileNotFoundError: If opencode is not found on PATH.
+        RuntimeError: If the version is too old or cannot be validated.
+    """
+    path = shutil.which("opencode")
+    if path is None:
+        raise FileNotFoundError(
+            "Could not find 'opencode' binary on PATH. "
+            "Install from https://opencode.ai"
+        )
+    validate_opencode_version(path)
+    return path
+
+
+def validate_opencode_version(binary_path: str) -> str:
+    """Validate that the opencode binary meets minimum version requirements.
+
+    Args:
+        binary_path: Path to the opencode binary.
+
+    Returns:
+        The version string (e.g., "1.1.52").
+
+    Raises:
+        RuntimeError: If version is too old, cannot be parsed, or binary hangs/fails.
+    """
+    try:
+        result = subprocess.run(
+            [binary_path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(
+            f"Timed out waiting for {binary_path} --version. "
+            "The binary may be hung or unresponsive."
+        )
+    except FileNotFoundError:
+        raise RuntimeError(
+            f"Binary not found at {binary_path}. "
+            "The path may be invalid or the binary was removed."
+        )
+
+    output = result.stdout + result.stderr
+    match = re.search(r"v?(\d+\.\d+\.\d+)", output)
+
+    if not match:
+        raise RuntimeError(
+            f"Could not parse version from opencode --version output: {output!r}"
+        )
+
+    version_str = match.group(1)
+    version_tuple = tuple(int(x) for x in version_str.split("."))
+
+    if version_tuple < MINIMUM_OPENCODE_VERSION:
+        min_version_str = ".".join(str(x) for x in MINIMUM_OPENCODE_VERSION)
+        raise RuntimeError(
+            f"opencode version {version_str} is too old. "
+            f"Minimum required: {min_version_str}. "
+            f"Update with: npm install -g opencode@latest"
+        )
+
+    return version_str
+
+
+def translate_model(model_alias: str, provider: str = DEFAULT_PROVIDER) -> str:
+    """Translate a model alias to a provider-specific model string.
+
+    Args:
+        model_alias: Model name or alias (e.g., "sonnet", "opus", "moonshot-ai/kimi-k2.5").
+        provider: Provider name (default: moonshot-ai).
+
+    Returns:
+        Full provider/model string (e.g., "moonshot-ai/kimi-k2.5").
+    """
+    # Passthrough if already in provider/model format
+    if "/" in model_alias:
+        return model_alias
+
+    # Resolve alias to base model name
+    model_name = MODEL_ALIASES.get(model_alias, model_alias)
+
+    # Look up provider-specific model string
+    if provider in PROVIDER_MODEL_MAP:
+        return PROVIDER_MODEL_MAP[provider]
+
+    # Fallback for unknown providers
+    return f"{provider}/{model_name}"
+
+
+def get_provider_config(provider: str) -> dict:
+    """Get the configuration block for a specific provider.
+
+    Args:
+        provider: Provider name (e.g., "moonshot-ai", "openrouter").
+
+    Returns:
+        Dictionary with provider configuration (credentials use {env:VAR_NAME} syntax).
+
+    Raises:
+        ValueError: If the provider is not supported.
+    """
+    if provider not in PROVIDER_CONFIGS:
+        supported = ", ".join(PROVIDER_CONFIGS.keys())
+        raise ValueError(
+            f"Unknown provider: {provider!r}. Supported providers: {supported}"
+        )
+
+    return {provider: PROVIDER_CONFIGS[provider]}
+
+
+def get_credential_env_var(provider: str) -> str:
+    """Get the environment variable name for a provider's API key.
+
+    Args:
+        provider: Provider name (e.g., "moonshot-ai").
+
+    Returns:
+        Environment variable name (e.g., "MOONSHOT_API_KEY").
+    """
+    if provider in _PROVIDER_ENV_VARS:
+        return _PROVIDER_ENV_VARS[provider]
+
+    # Fallback for unknown providers
+    return f"{provider.upper().replace('-', '_')}_API_KEY"
