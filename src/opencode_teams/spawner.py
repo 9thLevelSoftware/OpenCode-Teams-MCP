@@ -27,6 +27,11 @@ def is_tmux_available() -> bool:
     return shutil.which("tmux") is not None
 
 
+def is_windows() -> bool:
+    """Check if we're running on Windows."""
+    return sys.platform == "win32"
+
+
 # OpenCode binary discovery and configuration constants
 MINIMUM_OPENCODE_VERSION = (1, 1, 52)
 DEFAULT_PROVIDER = "moonshot-ai"
@@ -241,6 +246,16 @@ def spawn_teammate(
                     break
             teams.write_config(team_name, config, base_dir)
             member.process_id = pid
+        elif backend_type == "windows_terminal":
+            pid = spawn_windows_terminal(member, opencode_binary)
+            config = teams.read_config(team_name, base_dir)
+            for m in config.members:
+                if isinstance(m, TeammateMember) and m.name == name:
+                    m.process_id = pid
+                    m.backend_type = "windows_terminal"
+                    break
+            teams.write_config(team_name, config, base_dir)
+            member.process_id = pid
         else:
             cmd = build_opencode_run_command(member, opencode_binary)
             result = subprocess.run(
@@ -271,6 +286,92 @@ def spawn_teammate(
 
 def kill_tmux_pane(pane_id: str) -> None:
     subprocess.run(["tmux", "kill-pane", "-t", pane_id], check=False)
+
+
+def build_windows_terminal_command(
+    member: TeammateMember,
+    opencode_binary: str,
+    timeout_seconds: int = SPAWN_TIMEOUT_SECONDS,
+) -> list[str]:
+    """Build the command to run an OpenCode agent in a new Windows terminal.
+
+    Uses PowerShell with a timeout wrapper. Returns a list suitable for subprocess.
+
+    Args:
+        member: The teammate member with name, model, prompt, and cwd.
+        opencode_binary: Path to the opencode binary.
+        timeout_seconds: Maximum seconds before the process is killed (default: 300).
+
+    Returns:
+        Command list for subprocess.Popen.
+    """
+    # Escape prompt for PowerShell (double quotes and backticks)
+    escaped_prompt = member.prompt.replace('"', '`"').replace("'", "''")
+
+    # PowerShell command that:
+    # 1. Changes to the working directory
+    # 2. Runs opencode with a timeout
+    # 3. Keeps window open on error (for debugging)
+    ps_script = f"""
+$ErrorActionPreference = 'Stop'
+Set-Location -Path '{member.cwd}'
+$title = '[OpenCode] {member.name}'
+$host.UI.RawUI.WindowTitle = $title
+Write-Host "Starting OpenCode agent: {member.name}" -ForegroundColor Cyan
+Write-Host "Model: {member.model}" -ForegroundColor Gray
+Write-Host "Working directory: {member.cwd}" -ForegroundColor Gray
+Write-Host ""
+try {{
+    $process = Start-Process -FilePath '{opencode_binary}' -ArgumentList 'run','--agent','{member.name}','--model','{member.model}','--format','json','{escaped_prompt}' -PassThru -NoNewWindow -Wait
+    if ($process.ExitCode -ne 0) {{
+        Write-Host "Agent exited with code: $($process.ExitCode)" -ForegroundColor Yellow
+    }}
+}} catch {{
+    Write-Host "Error: $_" -ForegroundColor Red
+    Write-Host "Press any key to close..." -ForegroundColor Gray
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+}}
+"""
+
+    return [
+        "powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command", ps_script.strip(),
+    ]
+
+
+def spawn_windows_terminal(
+    member: TeammateMember,
+    opencode_binary: str,
+    timeout_seconds: int = SPAWN_TIMEOUT_SECONDS,
+) -> int:
+    """Spawn an OpenCode agent in a new Windows terminal window.
+
+    Uses `start` to create a new visible terminal window running PowerShell.
+
+    Args:
+        member: The teammate member with name, model, prompt, and cwd.
+        opencode_binary: Path to the opencode binary.
+        timeout_seconds: Maximum seconds before the process is killed.
+
+    Returns:
+        PID of the spawned process (note: this is the PowerShell process PID).
+    """
+    cmd = build_windows_terminal_command(member, opencode_binary, timeout_seconds)
+
+    # Use subprocess.Popen with CREATE_NEW_CONSOLE to spawn in a new visible window
+    proc = subprocess.Popen(
+        cmd,
+        cwd=member.cwd,
+        creationflags=subprocess.CREATE_NEW_CONSOLE,
+        # Don't capture output - let it show in the new window
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    return proc.pid
 
 
 def cleanup_agent_config(project_dir: Path, name: str) -> None:
@@ -400,21 +501,22 @@ def check_single_agent_health(
     Returns:
         AgentHealthStatus with the determined status and detail.
     """
-    # Desktop backend: process-based liveness only, no hung detection
-    if member.backend_type == "desktop":
+    # Desktop and windows_terminal backends: process-based liveness only, no hung detection
+    if member.backend_type in ("desktop", "windows_terminal"):
         pid = member.process_id
+        backend_label = "Desktop" if member.backend_type == "desktop" else "Windows terminal"
         if not check_process_alive(pid):
             return AgentHealthStatus(
                 agent_name=member.name,
                 pane_id=str(pid),
                 status="dead",
-                detail="Desktop process is no longer running",
+                detail=f"{backend_label} process is no longer running",
             )
         return AgentHealthStatus(
             agent_name=member.name,
             pane_id=str(pid),
             status="alive",
-            detail="Desktop process is running",
+            detail=f"{backend_label} process is running",
         )
 
     # Tmux backend: existing logic (unchanged)

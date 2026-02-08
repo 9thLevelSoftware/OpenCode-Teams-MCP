@@ -25,6 +25,7 @@ from opencode_teams.spawner import (
     discover_desktop_binary,
     discover_opencode_binary,
     is_tmux_available,
+    is_windows,
     kill_desktop_process,
     kill_tmux_pane,
     launch_desktop_app,
@@ -110,12 +111,17 @@ def spawn_teammate_tool(
     template: str = "",  # "researcher", "implementer", "reviewer", "tester", or "" for generic
     custom_instructions: str = "",  # Additional system prompt instructions to customize the agent
     plan_mode_required: bool = False,
-    backend: str = "auto",  # "auto", "tmux", or "desktop"
+    backend: str = "auto",  # "auto", "tmux", "windows_terminal", or "desktop"
 ) -> dict:
     """Spawn a new OpenCode teammate. Backend options:
-    - 'auto' (default): Uses tmux if available, otherwise desktop app
+    - 'auto' (default): Uses tmux if available, windows_terminal on Windows, otherwise desktop app
     - 'tmux': Spawn in a tmux pane (requires tmux installed)
-    - 'desktop': Launch the OpenCode desktop app
+    - 'windows_terminal': Spawn in a new PowerShell window (Windows only)
+    - 'desktop': Launch the OpenCode desktop app (GUI, requires manual interaction)
+
+    All spawned agents connect to this MCP server via the project's .opencode/config.json,
+    enabling communication through file-based inboxes.
+
     The teammate receives its initial prompt via inbox and begins working
     autonomously. Names must be unique within the team. Use template to assign
     a role (researcher, implementer, reviewer, tester). Use list_agent_templates
@@ -144,14 +150,19 @@ def spawn_teammate_tool(
     if backend == "auto":
         if is_tmux_available():
             effective_backend = "tmux"
+        elif is_windows():
+            # On Windows without tmux, use windows_terminal (new PowerShell windows)
+            effective_backend = "windows_terminal"
         else:
+            # On non-Windows without tmux, fall back to desktop app
             effective_backend = "desktop"
 
     # Validate tmux availability before attempting spawn
     if effective_backend == "tmux" and not is_tmux_available():
         raise ToolError(
             "tmux is not available on this system. "
-            "Either install tmux, or use backend='desktop' to spawn via the OpenCode desktop app."
+            "Either install tmux, use backend='windows_terminal' (Windows only), "
+            "or use backend='desktop' to spawn via the OpenCode desktop app."
         )
 
     # Desktop binary discovery
