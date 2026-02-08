@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Spawn Execution** - Construct and execute `opencode run` commands in tmux panes with timeout protection ✓
 - [x] **Phase 4: MCP Communication Validation** - Verify spawned agents can exchange messages and share state through the MCP server ✓
 - [x] **Phase 5: Agent Health & Monitoring** - Detect dead/hung agents and force-kill unresponsive instances ✓
-- [ ] **Phase 6: Agent Templates** - Pre-built role templates for common agent specializations
+- [x] **Phase 6: Agent Templates** - Pre-built role templates for common agent specializations ✓
 - [ ] **Phase 7: Desktop Spawning** - Support launching OpenCode desktop app as an alternative to CLI
 - [ ] **Phase 8: Legacy Cleanup** - Remove all Claude Code-specific code paths, update tests and documentation
 
@@ -110,8 +110,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 06-01-PLAN.md -- Template data model (AgentTemplate dataclass), 4 built-in role definitions, and config_gen extension for role_instructions/custom_instructions injection
-- [ ] 06-02-PLAN.md -- Wire template lookup into spawn flow and MCP tools: template param on spawn_teammate, list_agent_templates tool
+- [x] 06-01-PLAN.md -- Template data model (AgentTemplate dataclass), 4 built-in role definitions, and config_gen extension for role_instructions/custom_instructions injection ✓
+- [x] 06-02-PLAN.md -- Wire template lookup into spawn flow and MCP tools: template param on spawn_teammate, list_agent_templates tool ✓
 
 ### Phase 7: Desktop Spawning
 **Goal**: The system can spawn OpenCode desktop app instances as an alternative to CLI tmux panes, on Windows, macOS, and Linux
@@ -157,7 +157,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 3. Spawn Execution | 1/1 | ✓ Complete | 2026-02-08 |
 | 4. MCP Communication Validation | 2/2 | ✓ Complete | 2026-02-08 |
 | 5. Agent Health & Monitoring | 2/2 | ✓ Complete | 2026-02-08 |
-| 6. Agent Templates | 0/2 | Not started | - |
+| 6. Agent Templates | 2/2 | ✓ Complete | 2026-02-08 |
 | 7. Desktop Spawning | 0/2 | Not started | - |
 | 8. Legacy Cleanup | 0/4 | Not started | - |
 
