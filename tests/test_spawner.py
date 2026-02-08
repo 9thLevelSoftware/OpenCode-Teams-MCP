@@ -173,19 +173,19 @@ class TestBuildOpencodeRunCommand:
 class TestSpawnTeammateNameValidation:
     def test_should_reject_empty_name(self, team_dir: Path) -> None:
         with pytest.raises(ValueError, match="Invalid"):
-            spawn_teammate(TEAM, "", "prompt", "/bin/echo", SESSION_ID, base_dir=team_dir)
+            spawn_teammate(TEAM, "", "prompt", "/bin/echo", base_dir=team_dir)
 
     def test_should_reject_name_with_special_chars(self, team_dir: Path) -> None:
         with pytest.raises(ValueError, match="Invalid"):
-            spawn_teammate(TEAM, "agent!@#", "prompt", "/bin/echo", SESSION_ID, base_dir=team_dir)
+            spawn_teammate(TEAM, "agent!@#", "prompt", "/bin/echo", base_dir=team_dir)
 
     def test_should_reject_name_exceeding_64_chars(self, team_dir: Path) -> None:
         with pytest.raises(ValueError, match="too long"):
-            spawn_teammate(TEAM, "a" * 65, "prompt", "/bin/echo", SESSION_ID, base_dir=team_dir)
+            spawn_teammate(TEAM, "a" * 65, "prompt", "/bin/echo", base_dir=team_dir)
 
     def test_should_reject_reserved_name_team_lead(self, team_dir: Path) -> None:
         with pytest.raises(ValueError, match="reserved"):
-            spawn_teammate(TEAM, "team-lead", "prompt", "/bin/echo", SESSION_ID, base_dir=team_dir)
+            spawn_teammate(TEAM, "team-lead", "prompt", "/bin/echo", base_dir=team_dir)
 
 
 class TestSpawnTeammate:
@@ -199,7 +199,6 @@ class TestSpawnTeammate:
             "researcher",
             "Do research",
             "/usr/local/bin/claude",
-            SESSION_ID,
             base_dir=team_dir,
         )
         config = teams.read_config(TEAM, base_dir=team_dir)
@@ -216,7 +215,6 @@ class TestSpawnTeammate:
             "researcher",
             "Do research",
             "/usr/local/bin/claude",
-            SESSION_ID,
             base_dir=team_dir,
         )
         msgs = messaging.read_inbox(TEAM, "researcher", base_dir=team_dir)
@@ -234,7 +232,6 @@ class TestSpawnTeammate:
             "researcher",
             "Do research",
             "/usr/local/bin/opencode",
-            SESSION_ID,
             base_dir=team_dir,
         )
         assert member.tmux_pane_id == "%42"
@@ -253,7 +250,6 @@ class TestSpawnTeammate:
             "researcher",
             "Do research",
             "/usr/local/bin/opencode",
-            SESSION_ID,
             base_dir=team_dir,
         )
         # Get the tmux command string (last positional arg to subprocess.run)
@@ -282,7 +278,6 @@ class TestSpawnWithTemplate:
             "researcher",
             "Do research",
             "/usr/local/bin/opencode",
-            SESSION_ID,
             base_dir=tmp_claude_dir,
             project_dir=project_dir,
             model="moonshot-ai/kimi-k2.5",
@@ -309,7 +304,6 @@ class TestSpawnWithTemplate:
             "worker",
             "Do work",
             "/usr/local/bin/opencode",
-            SESSION_ID,
             base_dir=tmp_claude_dir,
             project_dir=project_dir,
             model="moonshot-ai/kimi-k2.5",
@@ -336,7 +330,6 @@ class TestSpawnWithTemplate:
             "generic",
             "Do generic work",
             "/usr/local/bin/opencode",
-            SESSION_ID,
             base_dir=tmp_claude_dir,
             project_dir=project_dir,
             model="moonshot-ai/kimi-k2.5",
@@ -363,7 +356,6 @@ class TestSpawnWithTemplate:
             "hybrid",
             "Do hybrid work",
             "/usr/local/bin/opencode",
-            SESSION_ID,
             base_dir=tmp_claude_dir,
             project_dir=project_dir,
             model="moonshot-ai/kimi-k2.5",
@@ -592,7 +584,6 @@ class TestConfigGenIntegration:
             "researcher",
             "Do research",
             "/usr/local/bin/opencode",
-            SESSION_ID,
             base_dir=tmp_claude_dir,
             project_dir=project_dir,
             model="moonshot-ai/kimi-k2.5",
@@ -631,7 +622,6 @@ class TestConfigGenIntegration:
             "worker",
             "Do work",
             "/usr/local/bin/opencode",
-            SESSION_ID,
             base_dir=tmp_claude_dir,
             project_dir=project_dir,
         )
@@ -1003,7 +993,7 @@ class TestSpawnDesktopBackend:
         project_dir.mkdir()
         member = spawn_teammate(
             TEAM, "desktop-agent", "Do work",
-            "/usr/local/bin/opencode", SESSION_ID,
+            "/usr/local/bin/opencode",
             backend_type="desktop",
             desktop_binary="/fake/opencode-desktop",
             base_dir=tmp_claude_dir,
@@ -1023,7 +1013,7 @@ class TestSpawnDesktopBackend:
         with pytest.raises(ValueError, match="desktop_binary is required"):
             spawn_teammate(
                 TEAM, "desktop-agent", "Do work",
-                "/usr/local/bin/opencode", SESSION_ID,
+                "/usr/local/bin/opencode",
                 backend_type="desktop",
                 base_dir=tmp_claude_dir,
                 project_dir=project_dir,
@@ -1040,7 +1030,7 @@ class TestSpawnDesktopBackend:
         project_dir.mkdir()
         spawn_teammate(
             TEAM, "desktop-agent", "Do work",
-            "/usr/local/bin/opencode", SESSION_ID,
+            "/usr/local/bin/opencode",
             backend_type="desktop",
             desktop_binary="/fake/opencode-desktop",
             base_dir=tmp_claude_dir,
@@ -1063,7 +1053,7 @@ class TestSpawnDesktopBackend:
         mock_subprocess.run.return_value.stdout = "%42\n"
         member = spawn_teammate(
             TEAM, "tmux-agent", "Do work",
-            "/usr/local/bin/opencode", SESSION_ID,
+            "/usr/local/bin/opencode",
             backend_type="tmux",
             base_dir=tmp_claude_dir,
             project_dir=project_dir,

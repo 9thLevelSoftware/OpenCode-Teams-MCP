@@ -156,7 +156,6 @@ def spawn_teammate(
     name: str,
     prompt: str,
     opencode_binary: str,
-    lead_session_id: str,
     *,
     model: str = "sonnet",
     subagent_type: str = "general-purpose",

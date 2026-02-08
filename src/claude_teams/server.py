@@ -128,7 +128,6 @@ def spawn_teammate_tool(
         name=name,
         prompt=prompt,
         opencode_binary=ls["opencode_binary"],
-        lead_session_id=ls["session_id"],
         model=resolved_model,
         subagent_type=template or "general-purpose",
         role_instructions=role_instructions,
