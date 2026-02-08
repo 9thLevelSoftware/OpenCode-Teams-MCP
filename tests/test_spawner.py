@@ -362,3 +362,114 @@ class TestGetCredentialEnvVar:
 
     def test_unknown_fallback(self) -> None:
         assert get_credential_env_var("my-custom") == "MY_CUSTOM_API_KEY"
+
+
+class TestConfigGenIntegration:
+    """Integration tests for config generation wiring in spawn flow."""
+
+    @patch("claude_teams.spawner.validate_opencode_version")
+    @patch("claude_teams.spawner.shutil.which")
+    @patch("claude_teams.spawner.subprocess")
+    def test_spawn_generates_agent_config(
+        self, mock_subprocess: MagicMock, mock_which: MagicMock,
+        mock_validate: MagicMock, tmp_claude_dir: Path, tmp_path: Path
+    ) -> None:
+        """Verify spawn_teammate generates .opencode/agents/<name>.md"""
+        mock_which.return_value = "/usr/local/bin/opencode"
+        mock_validate.return_value = "1.1.52"
+        mock_subprocess.run.return_value.stdout = "%42\n"
+
+        # Create team using tmp_claude_dir for team data
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+
+        # Use tmp_path as project_dir for config files
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+
+        spawn_teammate(
+            TEAM,
+            "researcher",
+            "Do research",
+            "/usr/local/bin/opencode",
+            SESSION_ID,
+            base_dir=tmp_claude_dir,
+            project_dir=project_dir,
+            model="moonshot-ai/kimi-k2.5",
+        )
+
+        # Verify agent config file exists
+        config_file = project_dir / ".opencode" / "agents" / "researcher.md"
+        assert config_file.exists()
+
+        # Verify content has expected YAML frontmatter
+        content = config_file.read_text()
+        assert "mode: primary" in content
+        assert "permission: allow" in content
+        assert "researcher" in content
+        assert TEAM in content
+
+    @patch("claude_teams.spawner.validate_opencode_version")
+    @patch("claude_teams.spawner.shutil.which")
+    @patch("claude_teams.spawner.subprocess")
+    def test_spawn_creates_opencode_json(
+        self, mock_subprocess: MagicMock, mock_which: MagicMock,
+        mock_validate: MagicMock, tmp_claude_dir: Path, tmp_path: Path
+    ) -> None:
+        """Verify spawn_teammate creates opencode.json with MCP server entry"""
+        mock_which.return_value = "/usr/local/bin/opencode"
+        mock_validate.return_value = "1.1.52"
+        mock_subprocess.run.return_value.stdout = "%43\n"
+
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+
+        project_dir = tmp_path / "project2"
+        project_dir.mkdir()
+
+        spawn_teammate(
+            TEAM,
+            "worker",
+            "Do work",
+            "/usr/local/bin/opencode",
+            SESSION_ID,
+            base_dir=tmp_claude_dir,
+            project_dir=project_dir,
+        )
+
+        # Verify opencode.json exists
+        opencode_json = project_dir / "opencode.json"
+        assert opencode_json.exists()
+
+        # Verify content has claude-teams MCP entry
+        import json
+        content = json.loads(opencode_json.read_text())
+        assert "mcp" in content
+        assert "claude-teams" in content["mcp"]
+        assert content["mcp"]["claude-teams"]["type"] == "local"
+        assert "claude-teams" in content["mcp"]["claude-teams"]["command"]
+
+    def test_cleanup_agent_config_removes_file(self, tmp_path: Path) -> None:
+        """Verify cleanup_agent_config removes the config file"""
+        from claude_teams.spawner import cleanup_agent_config
+
+        # Create fake agent config file
+        agents_dir = tmp_path / ".opencode" / "agents"
+        agents_dir.mkdir(parents=True)
+        config_file = agents_dir / "test-agent.md"
+        config_file.write_text("# Test config")
+
+        assert config_file.exists()
+
+        # Call cleanup
+        cleanup_agent_config(tmp_path, "test-agent")
+
+        # Verify file is gone
+        assert not config_file.exists()
+
+    def test_cleanup_agent_config_noop_if_missing(self, tmp_path: Path) -> None:
+        """Verify cleanup_agent_config doesn't error if file doesn't exist"""
+        from claude_teams.spawner import cleanup_agent_config
+
+        # Call cleanup on nonexistent file - should not raise
+        cleanup_agent_config(tmp_path, "nonexistent")
+
+        # No assertion needed - test passes if no exception raised

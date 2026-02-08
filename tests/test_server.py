@@ -579,3 +579,43 @@ class TestModelTranslationWiring:
             assert call_kwargs is not None
             if call_kwargs.kwargs:
                 assert call_kwargs.kwargs.get("model") == "openrouter/moonshotai/kimi-k2.5"
+
+
+class TestConfigCleanup:
+    """Tests for config cleanup integration in server lifecycle operations."""
+
+    async def test_force_kill_cleans_up_agent_config(self, client: Client):
+        """Verify force_kill_teammate calls cleanup_agent_config"""
+        await client.call_tool("team_create", {"team_name": "tk1"})
+        teams.add_member("tk1", _make_teammate("worker", "tk1", pane_id="%99"))
+
+        import unittest.mock
+        with unittest.mock.patch("claude_teams.server.cleanup_agent_config") as mock_cleanup:
+            await client.call_tool(
+                "force_kill_teammate",
+                {"team_name": "tk1", "agent_name": "worker"},
+            )
+            # Verify cleanup was called with the agent name
+            mock_cleanup.assert_called_once()
+            call_args = mock_cleanup.call_args
+            assert call_args is not None
+            # Second positional arg should be agent name
+            assert call_args[0][1] == "worker"
+
+    async def test_process_shutdown_cleans_up_agent_config(self, client: Client):
+        """Verify process_shutdown_approved calls cleanup_agent_config"""
+        await client.call_tool("team_create", {"team_name": "tk2"})
+        teams.add_member("tk2", _make_teammate("worker2", "tk2"))
+
+        import unittest.mock
+        with unittest.mock.patch("claude_teams.server.cleanup_agent_config") as mock_cleanup:
+            await client.call_tool(
+                "process_shutdown_approved",
+                {"team_name": "tk2", "agent_name": "worker2"},
+            )
+            # Verify cleanup was called with the agent name
+            mock_cleanup.assert_called_once()
+            call_args = mock_cleanup.call_args
+            assert call_args is not None
+            # Second positional arg should be agent name
+            assert call_args[0][1] == "worker2"
