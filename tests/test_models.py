@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from claude_teams.models import (
+from opencode_teams.models import (
     COLOR_PALETTE,
     IdleNotification,
     InboxMessage,

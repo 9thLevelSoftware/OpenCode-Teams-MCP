@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 from fastmcp import Client
 
-from claude_teams import messaging, tasks, teams
-from claude_teams.models import TeammateMember
-from claude_teams.server import mcp
+from opencode_teams import messaging, tasks, teams
+from opencode_teams.models import TeammateMember
+from opencode_teams.server import mcp
 
 
 def _make_teammate(name: str, team_name: str, pane_id: str = "%1") -> TeammateMember:
@@ -40,7 +40,7 @@ async def client(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(tasks, "TASKS_DIR", tmp_path / "tasks")
     monkeypatch.setattr(messaging, "TEAMS_DIR", tmp_path / "teams")
     monkeypatch.setattr(
-        "claude_teams.server.discover_opencode_binary", lambda: "/usr/bin/echo"
+        "opencode_teams.server.discover_opencode_binary", lambda: "/usr/bin/echo"
     )
     (tmp_path / "teams").mkdir()
     (tmp_path / "tasks").mkdir()

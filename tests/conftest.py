@@ -6,7 +6,7 @@ import pytest
 
 
 @pytest.fixture
-def tmp_claude_dir(tmp_path: Path) -> Path:
+def tmp_base_dir(tmp_path: Path) -> Path:
     teams_dir = tmp_path / "teams"
     teams_dir.mkdir()
     tasks_dir = tmp_path / "tasks"

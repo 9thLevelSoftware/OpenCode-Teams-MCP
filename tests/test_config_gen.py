@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from claude_teams.config_gen import (
+from opencode_teams.config_gen import (
     generate_agent_config,
     write_agent_config,
     ensure_opencode_json,
@@ -113,7 +113,7 @@ class TestGenerateAgentConfig:
         for tool in builtins:
             assert tools[tool] is True
 
-    def test_frontmatter_claude_teams_tools_enabled(self) -> None:
+    def test_frontmatter_opencode_teams_tools_enabled(self) -> None:
         result = generate_agent_config(
             agent_id="alice@team1",
             name="alice",
@@ -124,9 +124,9 @@ class TestGenerateAgentConfig:
         frontmatter = self._extract_frontmatter(result)
         tools = frontmatter["tools"]
 
-        # claude-teams MCP tools should be enabled with wildcard
-        assert "claude-teams_*" in tools
-        assert tools["claude-teams_*"] is True
+        # opencode-teams MCP tools should be enabled with wildcard
+        assert "opencode-teams_*" in tools
+        assert tools["opencode-teams_*"] is True
 
     def test_body_contains_agent_name(self) -> None:
         result = generate_agent_config(
@@ -181,7 +181,7 @@ class TestGenerateAgentConfig:
             model="moonshot-ai/kimi-k2.5",
         )
         body = self._extract_body(result)
-        assert "claude-teams_read_inbox" in body
+        assert "opencode-teams_read_inbox" in body
         assert "3-5 tool calls" in body
 
     def test_body_contains_send_message_instructions(self) -> None:
@@ -193,7 +193,7 @@ class TestGenerateAgentConfig:
             model="moonshot-ai/kimi-k2.5",
         )
         body = self._extract_body(result)
-        assert "claude-teams_send_message" in body
+        assert "opencode-teams_send_message" in body
 
     def test_body_contains_task_list_instructions(self) -> None:
         result = generate_agent_config(
@@ -204,7 +204,7 @@ class TestGenerateAgentConfig:
             model="moonshot-ai/kimi-k2.5",
         )
         body = self._extract_body(result)
-        assert "claude-teams_task_list" in body
+        assert "opencode-teams_task_list" in body
 
     def test_body_contains_task_update_instructions(self) -> None:
         result = generate_agent_config(
@@ -215,7 +215,7 @@ class TestGenerateAgentConfig:
             model="moonshot-ai/kimi-k2.5",
         )
         body = self._extract_body(result)
-        assert "claude-teams_task_update" in body
+        assert "opencode-teams_task_update" in body
 
     def test_body_contains_status_values(self) -> None:
         result = generate_agent_config(
@@ -496,7 +496,7 @@ class TestEnsureOpencodeJson:
 
         result_path = ensure_opencode_json(
             project_dir,
-            mcp_server_command="uv run claude-teams",
+            mcp_server_command="uv run opencode-teams",
         )
 
         expected = project_dir / "opencode.json"
@@ -509,7 +509,7 @@ class TestEnsureOpencodeJson:
 
         result_path = ensure_opencode_json(
             project_dir,
-            mcp_server_command="uv run claude-teams",
+            mcp_server_command="uv run opencode-teams",
         )
 
         content = json.loads(result_path.read_text(encoding="utf-8"))
@@ -521,12 +521,12 @@ class TestEnsureOpencodeJson:
 
         result_path = ensure_opencode_json(
             project_dir,
-            mcp_server_command="uv run claude-teams",
+            mcp_server_command="uv run opencode-teams",
         )
 
         content = json.loads(result_path.read_text(encoding="utf-8"))
         assert "mcp" in content
-        assert "claude-teams" in content["mcp"]
+        assert "opencode-teams" in content["mcp"]
 
     def test_mcp_entry_has_correct_structure(self, tmp_path: Path) -> None:
         project_dir = tmp_path / "project"
@@ -534,14 +534,14 @@ class TestEnsureOpencodeJson:
 
         result_path = ensure_opencode_json(
             project_dir,
-            mcp_server_command="uv run claude-teams",
+            mcp_server_command="uv run opencode-teams",
         )
 
         content = json.loads(result_path.read_text(encoding="utf-8"))
-        mcp_entry = content["mcp"]["claude-teams"]
+        mcp_entry = content["mcp"]["opencode-teams"]
 
         assert mcp_entry["type"] == "local"
-        assert mcp_entry["command"] == "uv run claude-teams"
+        assert mcp_entry["command"] == "uv run opencode-teams"
         assert mcp_entry["enabled"] is True
 
     def test_mcp_entry_includes_environment_when_provided(self, tmp_path: Path) -> None:
@@ -552,12 +552,12 @@ class TestEnsureOpencodeJson:
 
         result_path = ensure_opencode_json(
             project_dir,
-            mcp_server_command="uv run claude-teams",
+            mcp_server_command="uv run opencode-teams",
             mcp_server_env=env,
         )
 
         content = json.loads(result_path.read_text(encoding="utf-8"))
-        mcp_entry = content["mcp"]["claude-teams"]
+        mcp_entry = content["mcp"]["opencode-teams"]
 
         assert "environment" in mcp_entry
         assert mcp_entry["environment"] == env
@@ -583,7 +583,7 @@ class TestEnsureOpencodeJson:
 
         result_path = ensure_opencode_json(
             project_dir,
-            mcp_server_command="uv run claude-teams",
+            mcp_server_command="uv run opencode-teams",
         )
 
         content = json.loads(result_path.read_text(encoding="utf-8"))
@@ -596,16 +596,16 @@ class TestEnsureOpencodeJson:
         assert "other-server" in content["mcp"]
         assert content["mcp"]["other-server"]["command"] == "other"
 
-    def test_updates_existing_claude_teams_entry(self, tmp_path: Path) -> None:
+    def test_updates_existing_opencode_teams_entry(self, tmp_path: Path) -> None:
         project_dir = tmp_path / "project"
         project_dir.mkdir()
 
-        # Create existing opencode.json with old claude-teams entry
+        # Create existing opencode.json with old opencode-teams entry
         opencode_json = project_dir / "opencode.json"
         existing = {
             "$schema": "schema",
             "mcp": {
-                "claude-teams": {
+                "opencode-teams": {
                     "type": "local",
                     "command": "old-command",
                     "enabled": False,
@@ -616,14 +616,14 @@ class TestEnsureOpencodeJson:
 
         result_path = ensure_opencode_json(
             project_dir,
-            mcp_server_command="uv run claude-teams",
+            mcp_server_command="uv run opencode-teams",
         )
 
         content = json.loads(result_path.read_text(encoding="utf-8"))
 
         # Should update the entry
-        assert content["mcp"]["claude-teams"]["command"] == "uv run claude-teams"
-        assert content["mcp"]["claude-teams"]["enabled"] is True
+        assert content["mcp"]["opencode-teams"]["command"] == "uv run opencode-teams"
+        assert content["mcp"]["opencode-teams"]["enabled"] is True
 
     def test_creates_mcp_section_if_missing(self, tmp_path: Path) -> None:
         project_dir = tmp_path / "project"
@@ -639,14 +639,14 @@ class TestEnsureOpencodeJson:
 
         result_path = ensure_opencode_json(
             project_dir,
-            mcp_server_command="uv run claude-teams",
+            mcp_server_command="uv run opencode-teams",
         )
 
         content = json.loads(result_path.read_text(encoding="utf-8"))
 
         # Should add mcp section
         assert "mcp" in content
-        assert "claude-teams" in content["mcp"]
+        assert "opencode-teams" in content["mcp"]
 
         # Should preserve existing keys
         assert content["someOtherKey"] == "value"

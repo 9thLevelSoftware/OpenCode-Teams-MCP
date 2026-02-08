@@ -1,8 +1,8 @@
 <div align="center">
 
-# claude-teams
+# opencode-teams
 
-MCP server for orchestrating OpenCode agent teams with shared task lists and messaging.
+MCP server for orchestrating OpenCode agent teams with Kimi K2.5.
 
 </div>
 
@@ -16,31 +16,32 @@ https://github.com/user-attachments/assets/531ada0a-6c36-45cd-8144-a092bb9f9a19
 
 This MCP server implements a multi-agent coordination protocol for [OpenCode](https://opencode.ai) + Kimi K2.5. Multiple OpenCode instances coordinate as a team with shared task lists, inter-agent messaging, and tmux-based or desktop app spawning.
 
-The protocol is exposed as a standalone [MCP](https://modelcontextprotocol.io/) server, making it available to any MCP client that speaks MCP. Originally inspired by [Claude Code's agent teams internals](https://gist.github.com/cs50victor/0a7081e6824c135b4bdc28b566e1c719), the implementation has been adapted for the OpenCode + Kimi K2.5 stack. PRs are welcome.
+The protocol is exposed as a standalone [MCP](https://modelcontextprotocol.io/) server, making it available to any MCP client that speaks MCP. PRs are welcome.
 
 ## Install
 
-Add to your project's `.mcp.json` (Claude Code):
+Add to `~/.config/opencode/opencode.json`:
 
 ```json
 {
-  "mcpServers": {
-    "claude-teams": {
-      "command": "uvx",
-      "args": ["--from", "git+https://github.com/cs50victor/claude-code-teams-mcp", "claude-teams"]
+  "mcp": {
+    "opencode-teams": {
+      "type": "local",
+      "command": ["uvx", "--from", "git+https://github.com/DasBluEyedDevil/opencode-teams-mcp", "opencode-teams"],
+      "enabled": true
     }
   }
 }
 ```
 
-Or add to `~/.config/opencode/opencode.json` (OpenCode):
+Or for local development:
 
 ```json
 {
   "mcp": {
-    "claude-teams": {
+    "opencode-teams": {
       "type": "local",
-      "command": ["uvx", "--from", "git+https://github.com/cs50victor/claude-code-teams-mcp", "claude-teams"],
+      "command": ["uv", "run", "opencode-teams"],
       "enabled": true
     }
   }
@@ -69,7 +70,7 @@ Or add to `~/.config/opencode/opencode.json` (OpenCode):
 | `task_list` | List all tasks for a team. |
 | `task_get` | Get full details of a specific task. |
 | `force_kill_teammate` | Forcibly kill a teammate's tmux pane or desktop process and clean up. |
-| `list_agent_templates` | List available role templates from `.opencode/agents/` directory. |
+| `list_agent_templates` | List available role templates (researcher, implementer, reviewer, tester). |
 | `check_agent_health` | Check the health status (alive, dead, hung) of a single agent. |
 | `check_all_agents_health` | Check the health status of all agents in the current team. |
 | `process_shutdown_approved` | Remove a teammate after graceful shutdown approval. |
@@ -77,14 +78,14 @@ Or add to `~/.config/opencode/opencode.json` (OpenCode):
 ## How it works
 
 - **Spawning**: Teammates launch as separate OpenCode processes in tmux panes or as desktop app instances. Each gets a unique agent ID (`name@team`) and color.
-- **Messaging**: JSON-based inboxes under `~/.claude/teams/<team>/inboxes/`. File locking (`fcntl`) prevents corruption from concurrent reads/writes.
-- **Tasks**: JSON task files under `~/.claude/tasks/<team>/`. Tasks have status tracking, ownership, and dependency management (`blocks`/`blockedBy`).
-- **Concurrency safety**: Atomic writes via `tempfile` + `os.replace` for config. `fcntl` file locks for inbox operations.
+- **Messaging**: JSON-based inboxes under `~/.opencode-teams/teams/<team>/inboxes/`. File locking prevents corruption from concurrent reads/writes.
+- **Tasks**: JSON task files under `~/.opencode-teams/tasks/<team>/`. Tasks have status tracking, ownership, and dependency management (`blocks`/`blockedBy`).
+- **Concurrency safety**: Atomic writes via `tempfile` + `os.replace` for config. File locks for inbox operations.
 
 ## Storage layout
 
 ```
-~/.claude/
+~/.opencode-teams/
 ├── teams/<team-name>/
 │   ├── config.json          # team config + member list
 │   └── inboxes/

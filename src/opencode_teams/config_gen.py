@@ -54,8 +54,8 @@ def generate_agent_config(
             "websearch": True,
             "todoread": True,
             "todowrite": True,
-            # claude-teams MCP tools (wildcard enables all)
-            "claude-teams_*": True,
+            # opencode-teams MCP tools (wildcard enables all)
+            "opencode-teams_*": True,
         },
     }
 
@@ -95,21 +95,21 @@ def generate_agent_config(
 
         ## Inbox Polling
 
-        Check your inbox regularly by calling `claude-teams_read_inbox` every 3-5 tool calls.
+        Check your inbox regularly by calling `opencode-teams_read_inbox` every 3-5 tool calls.
         Always check your inbox before starting new work to see if you have messages or task assignments.
 
         Example:
         ```
-        claude-teams_read_inbox(team_name="{team_name}", agent_name="{name}")
+        opencode-teams_read_inbox(team_name="{team_name}", agent_name="{name}")
         ```
 
         ## Sending Messages
 
-        Use `claude-teams_send_message` to communicate with team members or the team lead.
+        Use `opencode-teams_send_message` to communicate with team members or the team lead.
 
         Example:
         ```
-        claude-teams_send_message(
+        opencode-teams_send_message(
             team_name="{team_name}",
             type="message",
             recipient="team-lead",
@@ -125,16 +125,16 @@ def generate_agent_config(
 
         ## Viewing Tasks
 
-        Use `claude-teams_task_list` to see available tasks.
+        Use `opencode-teams_task_list` to see available tasks.
 
         Example:
         ```
-        claude-teams_task_list(team_name="{team_name}")
+        opencode-teams_task_list(team_name="{team_name}")
         ```
 
         ## Claiming and Updating Tasks
 
-        Use `claude-teams_task_update` to claim tasks or update their status.
+        Use `opencode-teams_task_update` to claim tasks or update their status.
 
         Status values:
         - `in_progress`: You are working on this task
@@ -142,7 +142,7 @@ def generate_agent_config(
 
         Example:
         ```
-        claude-teams_task_update(
+        opencode-teams_task_update(
             team_name="{team_name}",
             task_id="task-123",
             status="in_progress",
@@ -196,14 +196,14 @@ def ensure_opencode_json(
     mcp_server_command: str,
     mcp_server_env: dict[str, str] | None = None,
 ) -> Path:
-    """Create or update opencode.json with claude-teams MCP server entry.
+    """Create or update opencode.json with opencode-teams MCP server entry.
 
-    If opencode.json exists, preserves all existing keys and merges the claude-teams
+    If opencode.json exists, preserves all existing keys and merges the opencode-teams
     MCP entry. If it doesn't exist, creates a new file with schema and MCP config.
 
     Args:
         project_dir: Project root directory
-        mcp_server_command: Command to start MCP server (e.g., "uv run claude-teams")
+        mcp_server_command: Command to start MCP server (e.g., "uv run opencode-teams")
         mcp_server_env: Optional environment variables for MCP server
 
     Returns:
@@ -222,7 +222,7 @@ def ensure_opencode_json(
     # Ensure mcp section exists
     content.setdefault("mcp", {})
 
-    # Build claude-teams MCP entry
+    # Build opencode-teams MCP entry
     mcp_entry = {
         "type": "local",
         "command": mcp_server_command,
@@ -233,7 +233,7 @@ def ensure_opencode_json(
         mcp_entry["environment"] = mcp_server_env
 
     # Merge into mcp section
-    content["mcp"]["claude-teams"] = mcp_entry
+    content["mcp"]["opencode-teams"] = mcp_entry
 
     # Write back
     opencode_json_path.write_text(

@@ -8,7 +8,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from claude_teams.models import (
+from opencode_teams.models import (
     LeadMember,
     TeamConfig,
     TeamCreateResult,
@@ -16,9 +16,9 @@ from claude_teams.models import (
     TeammateMember,
 )
 
-CLAUDE_DIR = Path.home() / ".claude"
-TEAMS_DIR = CLAUDE_DIR / "teams"
-TASKS_DIR = CLAUDE_DIR / "tasks"
+BASE_DIR = Path.home() / ".opencode-teams"
+TEAMS_DIR = BASE_DIR / "teams"
+TASKS_DIR = BASE_DIR / "tasks"
 
 _VALID_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "claude-teams"
+name = "opencode-teams"
 version = "0.1.0"
 description = "MCP server for orchestrating OpenCode agent teams with Kimi K2.5"
 requires-python = ">=3.12"
@@ -20,10 +20,10 @@ dev = [
 ]
 
 [project.scripts]
-claude-teams = "claude_teams.server:main"
+opencode-teams = "opencode_teams.server:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/claude_teams"]
+packages = ["src/opencode_teams"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

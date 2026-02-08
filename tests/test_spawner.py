@@ -10,9 +10,9 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from claude_teams import teams, messaging
-from claude_teams.models import AgentHealthStatus, COLOR_PALETTE, TeammateMember
-from claude_teams.spawner import (
+from opencode_teams import teams, messaging
+from opencode_teams.models import AgentHealthStatus, COLOR_PALETTE, TeammateMember
+from opencode_teams.spawner import (
     assign_color,
     build_opencode_run_command,
     capture_pane_content_hash,
@@ -49,9 +49,9 @@ SESSION_ID = "test-session-id"
 
 
 @pytest.fixture
-def team_dir(tmp_claude_dir: Path) -> Path:
-    teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
-    return tmp_claude_dir
+def team_dir(tmp_base_dir: Path) -> Path:
+    teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_base_dir)
+    return tmp_base_dir
 
 
 def _make_member(
@@ -189,7 +189,7 @@ class TestSpawnTeammateNameValidation:
 
 
 class TestSpawnTeammate:
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.subprocess")
     def test_registers_member_before_spawn(
         self, mock_subprocess: MagicMock, team_dir: Path
     ) -> None:
@@ -205,7 +205,7 @@ class TestSpawnTeammate:
         names = [m.name for m in config.members]
         assert "researcher" in names
 
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.subprocess")
     def test_writes_prompt_to_inbox(
         self, mock_subprocess: MagicMock, team_dir: Path
     ) -> None:
@@ -222,7 +222,7 @@ class TestSpawnTeammate:
         assert msgs[0].from_ == "team-lead"
         assert msgs[0].text == "Do research"
 
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.subprocess")
     def test_updates_pane_id(
         self, mock_subprocess: MagicMock, team_dir: Path
     ) -> None:
@@ -239,7 +239,7 @@ class TestSpawnTeammate:
         found = [m for m in config.members if m.name == "researcher"]
         assert found[0].tmux_pane_id == "%42"
 
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.subprocess")
     def test_spawn_uses_opencode_command(
         self, mock_subprocess: MagicMock, team_dir: Path
     ) -> None:
@@ -263,12 +263,12 @@ class TestSpawnTeammate:
 class TestSpawnWithTemplate:
     """Tests for template wiring in spawn flow (role_instructions, custom_instructions)."""
 
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.subprocess")
     def test_spawn_passes_role_instructions_to_config_gen(
-        self, mock_subprocess: MagicMock, tmp_claude_dir: Path, tmp_path: Path
+        self, mock_subprocess: MagicMock, tmp_base_dir: Path, tmp_path: Path
     ) -> None:
         mock_subprocess.run.return_value.stdout = "%42\n"
-        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_base_dir)
 
         project_dir = tmp_path / "project"
         project_dir.mkdir()
@@ -278,7 +278,7 @@ class TestSpawnWithTemplate:
             "researcher",
             "Do research",
             "/usr/local/bin/opencode",
-            base_dir=tmp_claude_dir,
+            base_dir=tmp_base_dir,
             project_dir=project_dir,
             model="moonshot-ai/kimi-k2.5",
             role_instructions="# Role: Tester\n\nTest stuff.",
@@ -289,12 +289,12 @@ class TestSpawnWithTemplate:
         content = config_file.read_text()
         assert "# Role: Tester" in content
 
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.subprocess")
     def test_spawn_passes_custom_instructions_to_config_gen(
-        self, mock_subprocess: MagicMock, tmp_claude_dir: Path, tmp_path: Path
+        self, mock_subprocess: MagicMock, tmp_base_dir: Path, tmp_path: Path
     ) -> None:
         mock_subprocess.run.return_value.stdout = "%42\n"
-        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_base_dir)
 
         project_dir = tmp_path / "project"
         project_dir.mkdir()
@@ -304,7 +304,7 @@ class TestSpawnWithTemplate:
             "worker",
             "Do work",
             "/usr/local/bin/opencode",
-            base_dir=tmp_claude_dir,
+            base_dir=tmp_base_dir,
             project_dir=project_dir,
             model="moonshot-ai/kimi-k2.5",
             custom_instructions="Focus on edge cases.",
@@ -315,12 +315,12 @@ class TestSpawnWithTemplate:
         content = config_file.read_text()
         assert "Focus on edge cases." in content
 
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.subprocess")
     def test_spawn_without_template_produces_clean_config(
-        self, mock_subprocess: MagicMock, tmp_claude_dir: Path, tmp_path: Path
+        self, mock_subprocess: MagicMock, tmp_base_dir: Path, tmp_path: Path
     ) -> None:
         mock_subprocess.run.return_value.stdout = "%42\n"
-        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_base_dir)
 
         project_dir = tmp_path / "project"
         project_dir.mkdir()
@@ -330,7 +330,7 @@ class TestSpawnWithTemplate:
             "generic",
             "Do generic work",
             "/usr/local/bin/opencode",
-            base_dir=tmp_claude_dir,
+            base_dir=tmp_base_dir,
             project_dir=project_dir,
             model="moonshot-ai/kimi-k2.5",
         )
@@ -341,12 +341,12 @@ class TestSpawnWithTemplate:
         assert "# Role:" not in content
         assert "# Additional Instructions" not in content
 
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.subprocess")
     def test_spawn_with_both_role_and_custom_instructions(
-        self, mock_subprocess: MagicMock, tmp_claude_dir: Path, tmp_path: Path
+        self, mock_subprocess: MagicMock, tmp_base_dir: Path, tmp_path: Path
     ) -> None:
         mock_subprocess.run.return_value.stdout = "%42\n"
-        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_base_dir)
 
         project_dir = tmp_path / "project"
         project_dir.mkdir()
@@ -356,7 +356,7 @@ class TestSpawnWithTemplate:
             "hybrid",
             "Do hybrid work",
             "/usr/local/bin/opencode",
-            base_dir=tmp_claude_dir,
+            base_dir=tmp_base_dir,
             project_dir=project_dir,
             model="moonshot-ai/kimi-k2.5",
             role_instructions="# Role: Tester\n\nTest everything.",
@@ -376,7 +376,7 @@ class TestSpawnWithTemplate:
 
 
 class TestKillTmuxPane:
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.subprocess")
     def test_calls_subprocess(self, mock_subprocess: MagicMock) -> None:
         kill_tmux_pane("%99")
         mock_subprocess.run.assert_called_once_with(
@@ -388,8 +388,8 @@ class TestKillTmuxPane:
 
 
 class TestDiscoverOpencodeBinary:
-    @patch("claude_teams.spawner.subprocess.run")
-    @patch("claude_teams.spawner.shutil.which")
+    @patch("opencode_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.shutil.which")
     def test_found_and_valid_version(
         self, mock_which: MagicMock, mock_run: MagicMock
     ) -> None:
@@ -399,14 +399,14 @@ class TestDiscoverOpencodeBinary:
         assert discover_opencode_binary() == "/usr/local/bin/opencode"
         mock_which.assert_called_once_with("opencode")
 
-    @patch("claude_teams.spawner.shutil.which")
+    @patch("opencode_teams.spawner.shutil.which")
     def test_not_found(self, mock_which: MagicMock) -> None:
         mock_which.return_value = None
         with pytest.raises(FileNotFoundError, match="opencode"):
             discover_opencode_binary()
 
-    @patch("claude_teams.spawner.subprocess.run")
-    @patch("claude_teams.spawner.shutil.which")
+    @patch("opencode_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.shutil.which")
     def test_version_too_old(
         self, mock_which: MagicMock, mock_run: MagicMock
     ) -> None:
@@ -416,8 +416,8 @@ class TestDiscoverOpencodeBinary:
         with pytest.raises(RuntimeError, match="too old"):
             discover_opencode_binary()
 
-    @patch("claude_teams.spawner.subprocess.run")
-    @patch("claude_teams.spawner.shutil.which")
+    @patch("opencode_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.shutil.which")
     def test_version_with_v_prefix(
         self, mock_which: MagicMock, mock_run: MagicMock
     ) -> None:
@@ -426,8 +426,8 @@ class TestDiscoverOpencodeBinary:
         mock_run.return_value.stderr = ""
         assert discover_opencode_binary() == "/usr/local/bin/opencode"
 
-    @patch("claude_teams.spawner.subprocess.run")
-    @patch("claude_teams.spawner.shutil.which")
+    @patch("opencode_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.shutil.which")
     def test_version_with_verbose_output(
         self, mock_which: MagicMock, mock_run: MagicMock
     ) -> None:
@@ -438,33 +438,33 @@ class TestDiscoverOpencodeBinary:
 
 
 class TestValidateOpencodeVersion:
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_valid_version(self, mock_run: MagicMock) -> None:
         mock_run.return_value.stdout = "1.1.52\n"
         mock_run.return_value.stderr = ""
         assert validate_opencode_version("/usr/local/bin/opencode") == "1.1.52"
 
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_newer_version(self, mock_run: MagicMock) -> None:
         mock_run.return_value.stdout = "2.0.0\n"
         mock_run.return_value.stderr = ""
         assert validate_opencode_version("/usr/local/bin/opencode") == "2.0.0"
 
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_old_version_raises(self, mock_run: MagicMock) -> None:
         mock_run.return_value.stdout = "1.1.49\n"
         mock_run.return_value.stderr = ""
         with pytest.raises(RuntimeError, match="too old"):
             validate_opencode_version("/usr/local/bin/opencode")
 
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_unparseable_output_raises(self, mock_run: MagicMock) -> None:
         mock_run.return_value.stdout = "unknown\n"
         mock_run.return_value.stderr = ""
         with pytest.raises(RuntimeError, match="Could not parse"):
             validate_opencode_version("/usr/local/bin/opencode")
 
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_timeout_raises(self, mock_run: MagicMock) -> None:
         mock_run.side_effect = subprocess.TimeoutExpired(
             cmd="opencode", timeout=10
@@ -472,7 +472,7 @@ class TestValidateOpencodeVersion:
         with pytest.raises(RuntimeError, match="Timed out"):
             validate_opencode_version("/usr/local/bin/opencode")
 
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_binary_not_found_raises(self, mock_run: MagicMock) -> None:
         mock_run.side_effect = FileNotFoundError
         with pytest.raises(RuntimeError):
@@ -560,20 +560,20 @@ class TestGetCredentialEnvVar:
 class TestConfigGenIntegration:
     """Integration tests for config generation wiring in spawn flow."""
 
-    @patch("claude_teams.spawner.validate_opencode_version")
-    @patch("claude_teams.spawner.shutil.which")
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.validate_opencode_version")
+    @patch("opencode_teams.spawner.shutil.which")
+    @patch("opencode_teams.spawner.subprocess")
     def test_spawn_generates_agent_config(
         self, mock_subprocess: MagicMock, mock_which: MagicMock,
-        mock_validate: MagicMock, tmp_claude_dir: Path, tmp_path: Path
+        mock_validate: MagicMock, tmp_base_dir: Path, tmp_path: Path
     ) -> None:
         """Verify spawn_teammate generates .opencode/agents/<name>.md"""
         mock_which.return_value = "/usr/local/bin/opencode"
         mock_validate.return_value = "1.1.52"
         mock_subprocess.run.return_value.stdout = "%42\n"
 
-        # Create team using tmp_claude_dir for team data
-        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        # Create team using tmp_base_dir for team data
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_base_dir)
 
         # Use tmp_path as project_dir for config files
         project_dir = tmp_path / "project"
@@ -584,7 +584,7 @@ class TestConfigGenIntegration:
             "researcher",
             "Do research",
             "/usr/local/bin/opencode",
-            base_dir=tmp_claude_dir,
+            base_dir=tmp_base_dir,
             project_dir=project_dir,
             model="moonshot-ai/kimi-k2.5",
         )
@@ -600,19 +600,19 @@ class TestConfigGenIntegration:
         assert "researcher" in content
         assert TEAM in content
 
-    @patch("claude_teams.spawner.validate_opencode_version")
-    @patch("claude_teams.spawner.shutil.which")
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.validate_opencode_version")
+    @patch("opencode_teams.spawner.shutil.which")
+    @patch("opencode_teams.spawner.subprocess")
     def test_spawn_creates_opencode_json(
         self, mock_subprocess: MagicMock, mock_which: MagicMock,
-        mock_validate: MagicMock, tmp_claude_dir: Path, tmp_path: Path
+        mock_validate: MagicMock, tmp_base_dir: Path, tmp_path: Path
     ) -> None:
         """Verify spawn_teammate creates opencode.json with MCP server entry"""
         mock_which.return_value = "/usr/local/bin/opencode"
         mock_validate.return_value = "1.1.52"
         mock_subprocess.run.return_value.stdout = "%43\n"
 
-        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_base_dir)
 
         project_dir = tmp_path / "project2"
         project_dir.mkdir()
@@ -622,7 +622,7 @@ class TestConfigGenIntegration:
             "worker",
             "Do work",
             "/usr/local/bin/opencode",
-            base_dir=tmp_claude_dir,
+            base_dir=tmp_base_dir,
             project_dir=project_dir,
         )
 
@@ -630,17 +630,17 @@ class TestConfigGenIntegration:
         opencode_json = project_dir / "opencode.json"
         assert opencode_json.exists()
 
-        # Verify content has claude-teams MCP entry
+        # Verify content has opencode-teams MCP entry
         import json
         content = json.loads(opencode_json.read_text())
         assert "mcp" in content
-        assert "claude-teams" in content["mcp"]
-        assert content["mcp"]["claude-teams"]["type"] == "local"
-        assert "claude-teams" in content["mcp"]["claude-teams"]["command"]
+        assert "opencode-teams" in content["mcp"]
+        assert content["mcp"]["opencode-teams"]["type"] == "local"
+        assert "opencode-teams" in content["mcp"]["opencode-teams"]["command"]
 
     def test_cleanup_agent_config_removes_file(self, tmp_path: Path) -> None:
         """Verify cleanup_agent_config removes the config file"""
-        from claude_teams.spawner import cleanup_agent_config
+        from opencode_teams.spawner import cleanup_agent_config
 
         # Create fake agent config file
         agents_dir = tmp_path / ".opencode" / "agents"
@@ -658,7 +658,7 @@ class TestConfigGenIntegration:
 
     def test_cleanup_agent_config_noop_if_missing(self, tmp_path: Path) -> None:
         """Verify cleanup_agent_config doesn't error if file doesn't exist"""
-        from claude_teams.spawner import cleanup_agent_config
+        from opencode_teams.spawner import cleanup_agent_config
 
         # Call cleanup on nonexistent file - should not raise
         cleanup_agent_config(tmp_path, "nonexistent")
@@ -670,19 +670,19 @@ class TestConfigGenIntegration:
 
 
 class TestCheckPaneAlive:
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_returns_true_for_alive_pane(self, mock_run: MagicMock) -> None:
         mock_run.return_value.stdout = "0\n"
         mock_run.return_value.returncode = 0
         assert check_pane_alive("%42") is True
 
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_returns_false_for_dead_pane(self, mock_run: MagicMock) -> None:
         mock_run.return_value.stdout = "1\n"
         mock_run.return_value.returncode = 0
         assert check_pane_alive("%42") is False
 
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_returns_false_for_missing_pane(self, mock_run: MagicMock) -> None:
         mock_run.return_value.returncode = 1
         mock_run.return_value.stdout = ""
@@ -692,19 +692,19 @@ class TestCheckPaneAlive:
         # No subprocess call should be made
         assert check_pane_alive("") is False
 
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_returns_false_on_timeout(self, mock_run: MagicMock) -> None:
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="tmux", timeout=5)
         assert check_pane_alive("%42") is False
 
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_returns_false_when_tmux_not_installed(self, mock_run: MagicMock) -> None:
         mock_run.side_effect = FileNotFoundError
         assert check_pane_alive("%42") is False
 
 
 class TestCapturePaneContentHash:
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_returns_hash_for_live_pane(self, mock_run: MagicMock) -> None:
         mock_run.return_value.stdout = "some output\n"
         mock_run.return_value.returncode = 0
@@ -713,7 +713,7 @@ class TestCapturePaneContentHash:
         assert len(result) == 64  # SHA-256 hex digest length
         assert all(c in "0123456789abcdef" for c in result)
 
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_returns_none_for_failed_capture(self, mock_run: MagicMock) -> None:
         mock_run.return_value.returncode = 1
         mock_run.return_value.stdout = ""
@@ -722,12 +722,12 @@ class TestCapturePaneContentHash:
     def test_returns_none_for_empty_pane_id(self) -> None:
         assert capture_pane_content_hash("") is None
 
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_returns_none_on_timeout(self, mock_run: MagicMock) -> None:
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="tmux", timeout=5)
         assert capture_pane_content_hash("%42") is None
 
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_same_content_produces_same_hash(self, mock_run: MagicMock) -> None:
         mock_run.return_value.stdout = "deterministic content"
         mock_run.return_value.returncode = 0
@@ -735,7 +735,7 @@ class TestCapturePaneContentHash:
         hash2 = capture_pane_content_hash("%42")
         assert hash1 == hash2
 
-    @patch("claude_teams.spawner.subprocess.run")
+    @patch("opencode_teams.spawner.subprocess.run")
     def test_different_content_produces_different_hash(self, mock_run: MagicMock) -> None:
         mock_run.return_value.returncode = 0
         mock_run.return_value.stdout = "content A"
@@ -746,8 +746,8 @@ class TestCapturePaneContentHash:
 
 
 class TestCheckSingleAgentHealth:
-    @patch("claude_teams.spawner.capture_pane_content_hash")
-    @patch("claude_teams.spawner.check_pane_alive")
+    @patch("opencode_teams.spawner.capture_pane_content_hash")
+    @patch("opencode_teams.spawner.check_pane_alive")
     def test_dead_when_pane_missing(
         self, mock_alive: MagicMock, mock_hash: MagicMock
     ) -> None:
@@ -760,8 +760,8 @@ class TestCheckSingleAgentHealth:
         assert result.agent_name == "worker"
         assert result.pane_id == "%42"
 
-    @patch("claude_teams.spawner.capture_pane_content_hash")
-    @patch("claude_teams.spawner.check_pane_alive")
+    @patch("opencode_teams.spawner.capture_pane_content_hash")
+    @patch("opencode_teams.spawner.check_pane_alive")
     def test_alive_when_pane_exists_and_content_changes(
         self, mock_alive: MagicMock, mock_hash: MagicMock
     ) -> None:
@@ -774,8 +774,8 @@ class TestCheckSingleAgentHealth:
         assert result.status == "alive"
         assert result.last_content_hash == "newhash"
 
-    @patch("claude_teams.spawner.capture_pane_content_hash")
-    @patch("claude_teams.spawner.check_pane_alive")
+    @patch("opencode_teams.spawner.capture_pane_content_hash")
+    @patch("opencode_teams.spawner.check_pane_alive")
     def test_hung_when_content_unchanged_beyond_timeout(
         self, mock_alive: MagicMock, mock_hash: MagicMock
     ) -> None:
@@ -789,8 +789,8 @@ class TestCheckSingleAgentHealth:
         )
         assert result.status == "hung"
 
-    @patch("claude_teams.spawner.capture_pane_content_hash")
-    @patch("claude_teams.spawner.check_pane_alive")
+    @patch("opencode_teams.spawner.capture_pane_content_hash")
+    @patch("opencode_teams.spawner.check_pane_alive")
     def test_alive_during_grace_period(
         self, mock_alive: MagicMock, mock_hash: MagicMock
     ) -> None:
@@ -806,8 +806,8 @@ class TestCheckSingleAgentHealth:
         assert result.status == "alive"
         assert "grace" in result.detail.lower()
 
-    @patch("claude_teams.spawner.capture_pane_content_hash")
-    @patch("claude_teams.spawner.check_pane_alive")
+    @patch("opencode_teams.spawner.capture_pane_content_hash")
+    @patch("opencode_teams.spawner.check_pane_alive")
     def test_unknown_when_capture_fails(
         self, mock_alive: MagicMock, mock_hash: MagicMock
     ) -> None:
@@ -819,8 +819,8 @@ class TestCheckSingleAgentHealth:
         result = check_single_agent_health(member, None, None)
         assert result.status == "unknown"
 
-    @patch("claude_teams.spawner.capture_pane_content_hash")
-    @patch("claude_teams.spawner.check_pane_alive")
+    @patch("opencode_teams.spawner.capture_pane_content_hash")
+    @patch("opencode_teams.spawner.check_pane_alive")
     def test_alive_when_content_unchanged_within_timeout(
         self, mock_alive: MagicMock, mock_hash: MagicMock
     ) -> None:
@@ -886,7 +886,7 @@ class TestDesktopDiscovery:
         fake_binary.write_text("fake")
         monkeypatch.setattr(sys, "platform", "linux")
         monkeypatch.setattr(
-            "claude_teams.spawner.DESKTOP_PATHS",
+            "opencode_teams.spawner.DESKTOP_PATHS",
             {"linux": [str(fake_binary)]},
         )
         monkeypatch.delenv(DESKTOP_BINARY_ENV_VAR, raising=False)
@@ -895,9 +895,9 @@ class TestDesktopDiscovery:
 
     def test_path_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(sys, "platform", "linux")
-        monkeypatch.setattr("claude_teams.spawner.DESKTOP_PATHS", {"linux": []})
+        monkeypatch.setattr("opencode_teams.spawner.DESKTOP_PATHS", {"linux": []})
         monkeypatch.setattr(
-            "claude_teams.spawner.shutil.which",
+            "opencode_teams.spawner.shutil.which",
             lambda name: "/usr/local/bin/opencode-desktop" if name == "opencode-desktop" else None,
         )
         monkeypatch.delenv(DESKTOP_BINARY_ENV_VAR, raising=False)
@@ -906,8 +906,8 @@ class TestDesktopDiscovery:
 
     def test_not_found_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(sys, "platform", "linux")
-        monkeypatch.setattr("claude_teams.spawner.DESKTOP_PATHS", {"linux": []})
-        monkeypatch.setattr("claude_teams.spawner.shutil.which", lambda name: None)
+        monkeypatch.setattr("opencode_teams.spawner.DESKTOP_PATHS", {"linux": []})
+        monkeypatch.setattr("opencode_teams.spawner.shutil.which", lambda name: None)
         monkeypatch.delenv(DESKTOP_BINARY_ENV_VAR, raising=False)
         with pytest.raises(FileNotFoundError, match="Could not find OpenCode Desktop"):
             discover_desktop_binary()
@@ -918,7 +918,7 @@ class TestDesktopLaunch:
         mock_popen = MagicMock()
         mock_popen.pid = 12345
         mock_popen_cls = MagicMock(return_value=mock_popen)
-        monkeypatch.setattr("claude_teams.spawner.subprocess.Popen", mock_popen_cls)
+        monkeypatch.setattr("opencode_teams.spawner.subprocess.Popen", mock_popen_cls)
         monkeypatch.setattr(sys, "platform", "linux")
 
         result = launch_desktop_app("/usr/bin/opencode-desktop", "/tmp/project")
@@ -933,7 +933,7 @@ class TestDesktopLaunch:
         mock_popen = MagicMock()
         mock_popen.pid = 99999
         mock_popen_cls = MagicMock(return_value=mock_popen)
-        monkeypatch.setattr("claude_teams.spawner.subprocess.Popen", mock_popen_cls)
+        monkeypatch.setattr("opencode_teams.spawner.subprocess.Popen", mock_popen_cls)
         monkeypatch.setattr(sys, "platform", "win32")
 
         result = launch_desktop_app("/usr/bin/opencode-desktop", "/tmp/project")
@@ -946,13 +946,13 @@ class TestDesktopLaunch:
 
 class TestProcessLifecycle:
     def test_check_alive_with_running_process(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("claude_teams.spawner.os.kill", lambda pid, sig: None)
+        monkeypatch.setattr("opencode_teams.spawner.os.kill", lambda pid, sig: None)
         assert check_process_alive(1234) is True
 
     def test_check_alive_with_dead_process(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def raise_os_error(pid: int, sig: int) -> None:
             raise OSError("No such process")
-        monkeypatch.setattr("claude_teams.spawner.os.kill", raise_os_error)
+        monkeypatch.setattr("opencode_teams.spawner.os.kill", raise_os_error)
         assert check_process_alive(1234) is False
 
     def test_check_alive_with_zero_pid(self) -> None:
@@ -963,32 +963,32 @@ class TestProcessLifecycle:
 
     def test_kill_desktop_process(self, monkeypatch: pytest.MonkeyPatch) -> None:
         mock_kill = MagicMock()
-        monkeypatch.setattr("claude_teams.spawner.os.kill", mock_kill)
+        monkeypatch.setattr("opencode_teams.spawner.os.kill", mock_kill)
         kill_desktop_process(5678)
         mock_kill.assert_called_once_with(5678, signal.SIGTERM)
 
     def test_kill_desktop_process_already_dead(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def raise_os_error(pid: int, sig: int) -> None:
             raise OSError("No such process")
-        monkeypatch.setattr("claude_teams.spawner.os.kill", raise_os_error)
+        monkeypatch.setattr("opencode_teams.spawner.os.kill", raise_os_error)
         # Should not raise
         kill_desktop_process(5678)
 
     def test_kill_desktop_process_zero_pid(self, monkeypatch: pytest.MonkeyPatch) -> None:
         mock_kill = MagicMock()
-        monkeypatch.setattr("claude_teams.spawner.os.kill", mock_kill)
+        monkeypatch.setattr("opencode_teams.spawner.os.kill", mock_kill)
         kill_desktop_process(0)
         mock_kill.assert_not_called()
 
 
 class TestSpawnDesktopBackend:
-    @patch("claude_teams.spawner.launch_desktop_app", return_value=9999)
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.launch_desktop_app", return_value=9999)
+    @patch("opencode_teams.spawner.subprocess")
     def test_spawn_desktop_calls_launch_desktop_app(
         self, mock_subprocess: MagicMock, mock_launch: MagicMock,
-        tmp_claude_dir: Path, tmp_path: Path,
+        tmp_base_dir: Path, tmp_path: Path,
     ) -> None:
-        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_base_dir)
         project_dir = tmp_path / "project"
         project_dir.mkdir()
         member = spawn_teammate(
@@ -996,7 +996,7 @@ class TestSpawnDesktopBackend:
             "/usr/local/bin/opencode",
             backend_type="desktop",
             desktop_binary="/fake/opencode-desktop",
-            base_dir=tmp_claude_dir,
+            base_dir=tmp_base_dir,
             project_dir=project_dir,
         )
         mock_launch.assert_called_once()
@@ -1005,9 +1005,9 @@ class TestSpawnDesktopBackend:
         assert member.backend_type == "desktop"
 
     def test_spawn_desktop_requires_desktop_binary(
-        self, tmp_claude_dir: Path, tmp_path: Path,
+        self, tmp_base_dir: Path, tmp_path: Path,
     ) -> None:
-        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_base_dir)
         project_dir = tmp_path / "project"
         project_dir.mkdir()
         with pytest.raises(ValueError, match="desktop_binary is required"):
@@ -1015,17 +1015,17 @@ class TestSpawnDesktopBackend:
                 TEAM, "desktop-agent", "Do work",
                 "/usr/local/bin/opencode",
                 backend_type="desktop",
-                base_dir=tmp_claude_dir,
+                base_dir=tmp_base_dir,
                 project_dir=project_dir,
             )
 
-    @patch("claude_teams.spawner.launch_desktop_app", return_value=8888)
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.launch_desktop_app", return_value=8888)
+    @patch("opencode_teams.spawner.subprocess")
     def test_spawn_desktop_stores_pid_in_config(
         self, mock_subprocess: MagicMock, mock_launch: MagicMock,
-        tmp_claude_dir: Path, tmp_path: Path,
+        tmp_base_dir: Path, tmp_path: Path,
     ) -> None:
-        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_base_dir)
         project_dir = tmp_path / "project"
         project_dir.mkdir()
         spawn_teammate(
@@ -1033,21 +1033,21 @@ class TestSpawnDesktopBackend:
             "/usr/local/bin/opencode",
             backend_type="desktop",
             desktop_binary="/fake/opencode-desktop",
-            base_dir=tmp_claude_dir,
+            base_dir=tmp_base_dir,
             project_dir=project_dir,
         )
-        config = teams.read_config(TEAM, base_dir=tmp_claude_dir)
+        config = teams.read_config(TEAM, base_dir=tmp_base_dir)
         found = [m for m in config.members if isinstance(m, TeammateMember) and m.name == "desktop-agent"]
         assert len(found) == 1
         assert found[0].process_id == 8888
         assert found[0].backend_type == "desktop"
 
-    @patch("claude_teams.spawner.subprocess")
+    @patch("opencode_teams.spawner.subprocess")
     def test_spawn_tmux_still_works(
         self, mock_subprocess: MagicMock,
-        tmp_claude_dir: Path, tmp_path: Path,
+        tmp_base_dir: Path, tmp_path: Path,
     ) -> None:
-        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_base_dir)
         project_dir = tmp_path / "project"
         project_dir.mkdir()
         mock_subprocess.run.return_value.stdout = "%42\n"
@@ -1055,7 +1055,7 @@ class TestSpawnDesktopBackend:
             TEAM, "tmux-agent", "Do work",
             "/usr/local/bin/opencode",
             backend_type="tmux",
-            base_dir=tmp_claude_dir,
+            base_dir=tmp_base_dir,
             project_dir=project_dir,
         )
         mock_subprocess.run.assert_called_once()
@@ -1072,7 +1072,7 @@ class TestDesktopHealthCheck:
             model="kimi-k2.5", prompt="work", color="blue", joined_at=0,
             tmux_pane_id="", cwd="/tmp", backend_type="desktop", process_id=1234,
         )
-        monkeypatch.setattr("claude_teams.spawner.check_process_alive", lambda pid: True)
+        monkeypatch.setattr("opencode_teams.spawner.check_process_alive", lambda pid: True)
         result = check_single_agent_health(member, None, None)
         assert result.status == "alive"
         assert "running" in result.detail
@@ -1083,7 +1083,7 @@ class TestDesktopHealthCheck:
             model="kimi-k2.5", prompt="work", color="blue", joined_at=0,
             tmux_pane_id="", cwd="/tmp", backend_type="desktop", process_id=1234,
         )
-        monkeypatch.setattr("claude_teams.spawner.check_process_alive", lambda pid: False)
+        monkeypatch.setattr("opencode_teams.spawner.check_process_alive", lambda pid: False)
         result = check_single_agent_health(member, None, None)
         assert result.status == "dead"
         assert "no longer running" in result.detail
@@ -1094,7 +1094,7 @@ class TestDesktopHealthCheck:
             model="kimi-k2.5", prompt="work", color="blue", joined_at=0,
             tmux_pane_id="", cwd="/tmp", backend_type="desktop", process_id=1234,
         )
-        monkeypatch.setattr("claude_teams.spawner.check_process_alive", lambda pid: True)
+        monkeypatch.setattr("opencode_teams.spawner.check_process_alive", lambda pid: True)
         # Simulate conditions that would trigger "hung" for tmux backend
         result = check_single_agent_health(
             member, "samehash", time.time() - 300, hung_timeout=120,

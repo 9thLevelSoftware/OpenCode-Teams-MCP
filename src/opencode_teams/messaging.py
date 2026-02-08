@@ -10,14 +10,14 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from claude_teams.models import (
+from opencode_teams.models import (
     InboxMessage,
     ShutdownRequest,
     TaskAssignment,
     TaskFile,
 )
 
-TEAMS_DIR = Path.home() / ".claude" / "teams"
+TEAMS_DIR = Path.home() / ".opencode-teams" / "teams"
 
 
 def _teams_dir(base_dir: Path | None = None) -> Path:

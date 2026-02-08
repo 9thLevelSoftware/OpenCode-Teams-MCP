@@ -7,10 +7,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from claude_teams.models import TaskFile
-from claude_teams.teams import team_exists
+from opencode_teams.models import TaskFile
+from opencode_teams.teams import team_exists
 
-TASKS_DIR = Path.home() / ".claude" / "tasks"
+TASKS_DIR = Path.home() / ".opencode-teams" / "tasks"
 
 
 if sys.platform == "win32":

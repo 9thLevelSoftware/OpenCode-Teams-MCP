@@ -8,8 +8,8 @@ from fastmcp import Context, FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.lifespan import lifespan
 
-from claude_teams import messaging, tasks, teams
-from claude_teams.models import (
+from opencode_teams import messaging, tasks, teams
+from opencode_teams.models import (
     AgentHealthStatus,
     COLOR_PALETTE,
     InboxMessage,
@@ -18,7 +18,7 @@ from claude_teams.models import (
     SpawnResult,
     TeammateMember,
 )
-from claude_teams.spawner import (
+from opencode_teams.spawner import (
     check_process_alive,
     check_single_agent_health,
     cleanup_agent_config,
@@ -32,7 +32,7 @@ from claude_teams.spawner import (
     spawn_teammate,
     translate_model,
 )
-from claude_teams.templates import TEMPLATES, get_template, list_templates
+from opencode_teams.templates import TEMPLATES, get_template, list_templates
 
 
 @lifespan
@@ -43,7 +43,7 @@ async def app_lifespan(server):
 
 
 mcp = FastMCP(
-    name="claude-teams",
+    name="opencode-teams",
     instructions=(
         "MCP server for orchestrating OpenCode agent teams with Kimi K2.5. "
         "Manages team creation, teammate spawning with Kimi K2.5, messaging, and task tracking."
@@ -62,7 +62,7 @@ def team_create(
     ctx: Context,
     description: str = "",
 ) -> dict:
-    """Create a new agent team. Sets up team config and task directories under ~/.claude/.
+    """Create a new agent team. Sets up team config and task directories under ~/.opencode-teams/.
     One team per server session. Team names must be filesystem-safe
     (letters, numbers, hyphens, underscores)."""
     ls = _get_lifespan(ctx)

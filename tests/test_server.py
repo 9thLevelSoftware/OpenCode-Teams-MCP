@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 from fastmcp import Client
 
-from claude_teams import messaging, tasks, teams
-from claude_teams.models import AgentHealthStatus, TeammateMember
-from claude_teams.server import mcp
+from opencode_teams import messaging, tasks, teams
+from opencode_teams.models import AgentHealthStatus, TeammateMember
+from opencode_teams.server import mcp
 
 
 def _make_teammate(name: str, team_name: str, pane_id: str = "%1") -> TeammateMember:
@@ -35,7 +35,7 @@ async def client(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(tasks, "TASKS_DIR", tmp_path / "tasks")
     monkeypatch.setattr(messaging, "TEAMS_DIR", tmp_path / "teams")
     monkeypatch.setattr(
-        "claude_teams.server.discover_opencode_binary", lambda: "/usr/bin/echo"
+        "opencode_teams.server.discover_opencode_binary", lambda: "/usr/bin/echo"
     )
     (tmp_path / "teams").mkdir()
     (tmp_path / "tasks").mkdir()
@@ -546,7 +546,7 @@ class TestModelTranslationWiring:
         await client.call_tool("team_create", {"team_name": "tm1"})
         # Mock spawn_teammate to capture the model argument without actually spawning
         import unittest.mock
-        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn:
+        with unittest.mock.patch("opencode_teams.server.spawn_teammate") as mock_spawn:
             mock_spawn.return_value = TeammateMember(
                 agent_id="worker@tm1", name="worker", agent_type="general-purpose",
                 model="moonshot-ai/kimi-k2.5", prompt="do work", color="blue",
@@ -566,7 +566,7 @@ class TestModelTranslationWiring:
         """Verify that a direct provider/model string passes through unchanged."""
         await client.call_tool("team_create", {"team_name": "tm2"})
         import unittest.mock
-        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn:
+        with unittest.mock.patch("opencode_teams.server.spawn_teammate") as mock_spawn:
             mock_spawn.return_value = TeammateMember(
                 agent_id="worker@tm2", name="worker", agent_type="general-purpose",
                 model="openrouter/moonshotai/kimi-k2.5", prompt="do work", color="blue",
@@ -602,7 +602,7 @@ class TestListAgentTemplates:
 class TestSpawnWithTemplateTool:
     async def test_spawn_with_researcher_template(self, client: Client):
         await client.call_tool("team_create", {"team_name": "tpl1"})
-        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn:
+        with unittest.mock.patch("opencode_teams.server.spawn_teammate") as mock_spawn:
             mock_spawn.return_value = TeammateMember(
                 agent_id="worker@tpl1", name="worker", agent_type="researcher",
                 model="moonshot-ai/kimi-k2.5", prompt="do research", color="blue",
@@ -618,7 +618,7 @@ class TestSpawnWithTemplateTool:
 
     async def test_spawn_with_custom_instructions(self, client: Client):
         await client.call_tool("team_create", {"team_name": "tpl2"})
-        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn:
+        with unittest.mock.patch("opencode_teams.server.spawn_teammate") as mock_spawn:
             mock_spawn.return_value = TeammateMember(
                 agent_id="worker@tpl2", name="worker", agent_type="general-purpose",
                 model="moonshot-ai/kimi-k2.5", prompt="do work", color="blue",
@@ -633,7 +633,7 @@ class TestSpawnWithTemplateTool:
 
     async def test_spawn_with_template_and_custom_instructions(self, client: Client):
         await client.call_tool("team_create", {"team_name": "tpl3"})
-        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn:
+        with unittest.mock.patch("opencode_teams.server.spawn_teammate") as mock_spawn:
             mock_spawn.return_value = TeammateMember(
                 agent_id="worker@tpl3", name="worker", agent_type="tester",
                 model="moonshot-ai/kimi-k2.5", prompt="test stuff", color="blue",
@@ -665,7 +665,7 @@ class TestSpawnWithTemplateTool:
 
     async def test_spawn_without_template_uses_general_purpose(self, client: Client):
         await client.call_tool("team_create", {"team_name": "tpl5"})
-        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn:
+        with unittest.mock.patch("opencode_teams.server.spawn_teammate") as mock_spawn:
             mock_spawn.return_value = TeammateMember(
                 agent_id="worker@tpl5", name="worker", agent_type="general-purpose",
                 model="moonshot-ai/kimi-k2.5", prompt="do work", color="blue",
@@ -680,7 +680,7 @@ class TestSpawnWithTemplateTool:
 
     async def test_spawn_template_sets_subagent_type(self, client: Client):
         await client.call_tool("team_create", {"team_name": "tpl6"})
-        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn:
+        with unittest.mock.patch("opencode_teams.server.spawn_teammate") as mock_spawn:
             mock_spawn.return_value = TeammateMember(
                 agent_id="worker@tpl6", name="worker", agent_type="tester",
                 model="moonshot-ai/kimi-k2.5", prompt="test", color="blue",
@@ -703,8 +703,8 @@ class TestConfigCleanup:
         teams.add_member("tk1", _make_teammate("worker", "tk1", pane_id="%99"))
 
         import unittest.mock
-        with unittest.mock.patch("claude_teams.server.cleanup_agent_config") as mock_cleanup, \
-             unittest.mock.patch("claude_teams.server.kill_tmux_pane"):
+        with unittest.mock.patch("opencode_teams.server.cleanup_agent_config") as mock_cleanup, \
+             unittest.mock.patch("opencode_teams.server.kill_tmux_pane"):
             await client.call_tool(
                 "force_kill_teammate",
                 {"team_name": "tk1", "agent_name": "worker"},
@@ -722,7 +722,7 @@ class TestConfigCleanup:
         teams.add_member("tk2", _make_teammate("worker2", "tk2"))
 
         import unittest.mock
-        with unittest.mock.patch("claude_teams.server.cleanup_agent_config") as mock_cleanup:
+        with unittest.mock.patch("opencode_teams.server.cleanup_agent_config") as mock_cleanup:
             await client.call_tool(
                 "process_shutdown_approved",
                 {"team_name": "tk2", "agent_name": "worker2"},
@@ -770,7 +770,7 @@ class TestCheckAgentHealth:
         teams.add_member("th1", _make_teammate("worker", "th1", pane_id="%10"))
 
         with unittest.mock.patch(
-            "claude_teams.server.check_single_agent_health",
+            "opencode_teams.server.check_single_agent_health",
             return_value=_make_alive_status("worker", "%10"),
         ):
             result = _data(
@@ -788,7 +788,7 @@ class TestCheckAgentHealth:
         teams.add_member("th2", _make_teammate("worker", "th2", pane_id="%20"))
 
         with unittest.mock.patch(
-            "claude_teams.server.check_single_agent_health",
+            "opencode_teams.server.check_single_agent_health",
             return_value=_make_dead_status("worker", "%20"),
         ):
             result = _data(
@@ -816,7 +816,7 @@ class TestCheckAgentHealth:
 
         # First call returns alive with a content hash
         with unittest.mock.patch(
-            "claude_teams.server.check_single_agent_health",
+            "opencode_teams.server.check_single_agent_health",
             return_value=_make_alive_status("worker", "%30", content_hash="samehash"),
         ):
             result1 = _data(
@@ -829,7 +829,7 @@ class TestCheckAgentHealth:
 
         # Second call: same hash, enough time passed -> hung
         with unittest.mock.patch(
-            "claude_teams.server.check_single_agent_health",
+            "opencode_teams.server.check_single_agent_health",
             return_value=_make_hung_status("worker", "%30", content_hash="samehash"),
         ):
             result2 = _data(
@@ -856,7 +856,7 @@ class TestCheckAgentHealth:
 
         # First call: no previous state
         with unittest.mock.patch(
-            "claude_teams.server.check_single_agent_health",
+            "opencode_teams.server.check_single_agent_health",
             side_effect=capture_check,
         ):
             await client.call_tool(
@@ -876,7 +876,7 @@ class TestCheckAgentHealth:
             return _make_alive_status(member.name, member.tmux_pane_id, content_hash="hash2")
 
         with unittest.mock.patch(
-            "claude_teams.server.check_single_agent_health",
+            "opencode_teams.server.check_single_agent_health",
             side_effect=capture_check_2,
         ):
             await client.call_tool(
@@ -892,7 +892,7 @@ class TestCheckAgentHealth:
         teams.add_member("th6", _make_teammate("worker", "th6", pane_id="%50"))
 
         with unittest.mock.patch(
-            "claude_teams.server.check_single_agent_health",
+            "opencode_teams.server.check_single_agent_health",
             return_value=_make_alive_status("worker", "%50", content_hash="xyz"),
         ):
             result = _data(
@@ -920,7 +920,7 @@ class TestCheckAllAgentsHealth:
             return _make_alive_status(member.name, member.tmux_pane_id)
 
         with unittest.mock.patch(
-            "claude_teams.server.check_single_agent_health",
+            "opencode_teams.server.check_single_agent_health",
             side_effect=mock_check,
         ):
             result = _data(
@@ -943,7 +943,7 @@ class TestCheckAllAgentsHealth:
             return _make_alive_status(member.name, member.tmux_pane_id)
 
         with unittest.mock.patch(
-            "claude_teams.server.check_single_agent_health",
+            "opencode_teams.server.check_single_agent_health",
             side_effect=mock_check,
         ):
             result = _data(
@@ -980,7 +980,7 @@ class TestCheckAllAgentsHealth:
 
         # First call
         with unittest.mock.patch(
-            "claude_teams.server.check_single_agent_health",
+            "opencode_teams.server.check_single_agent_health",
             side_effect=mock_check,
         ):
             await client.call_tool(
@@ -1001,7 +1001,7 @@ class TestCheckAllAgentsHealth:
             return _make_alive_status(member.name, member.tmux_pane_id, content_hash=f"hash2_{member.name}")
 
         with unittest.mock.patch(
-            "claude_teams.server.check_single_agent_health",
+            "opencode_teams.server.check_single_agent_health",
             side_effect=mock_check_2,
         ):
             await client.call_tool(
@@ -1017,8 +1017,8 @@ class TestCheckAllAgentsHealth:
 class TestSpawnDesktopBackendTool:
     async def test_spawn_with_desktop_backend(self, client: Client):
         await client.call_tool("team_create", {"team_name": "td1"})
-        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn, \
-             unittest.mock.patch("claude_teams.server.discover_desktop_binary", return_value="/fake/desktop"):
+        with unittest.mock.patch("opencode_teams.server.spawn_teammate") as mock_spawn, \
+             unittest.mock.patch("opencode_teams.server.discover_desktop_binary", return_value="/fake/desktop"):
             mock_spawn.return_value = TeammateMember(
                 agent_id="worker@td1", name="worker", agent_type="general-purpose",
                 model="moonshot-ai/kimi-k2.5", prompt="do work", color="blue",
@@ -1035,7 +1035,7 @@ class TestSpawnDesktopBackendTool:
 
     async def test_spawn_with_tmux_backend_default(self, client: Client):
         await client.call_tool("team_create", {"team_name": "td2"})
-        with unittest.mock.patch("claude_teams.server.spawn_teammate") as mock_spawn:
+        with unittest.mock.patch("opencode_teams.server.spawn_teammate") as mock_spawn:
             mock_spawn.return_value = TeammateMember(
                 agent_id="worker@td2", name="worker", agent_type="general-purpose",
                 model="moonshot-ai/kimi-k2.5", prompt="do work", color="blue",
@@ -1051,7 +1051,7 @@ class TestSpawnDesktopBackendTool:
     async def test_spawn_desktop_discovery_failure(self, client: Client):
         await client.call_tool("team_create", {"team_name": "td3"})
         with unittest.mock.patch(
-            "claude_teams.server.discover_desktop_binary",
+            "opencode_teams.server.discover_desktop_binary",
             side_effect=FileNotFoundError("Desktop binary not found"),
         ):
             result = await client.call_tool(
@@ -1075,8 +1075,8 @@ class TestForceKillDesktopBackend:
         )
         teams.add_member("tk_d1", member)
 
-        with unittest.mock.patch("claude_teams.server.kill_desktop_process") as mock_kill_desktop, \
-             unittest.mock.patch("claude_teams.server.kill_tmux_pane") as mock_kill_tmux:
+        with unittest.mock.patch("opencode_teams.server.kill_desktop_process") as mock_kill_desktop, \
+             unittest.mock.patch("opencode_teams.server.kill_tmux_pane") as mock_kill_tmux:
             await client.call_tool(
                 "force_kill_teammate",
                 {"team_name": "tk_d1", "agent_name": "worker"},
@@ -1094,8 +1094,8 @@ class TestForceKillDesktopBackend:
         )
         teams.add_member("tk_d2", member)
 
-        with unittest.mock.patch("claude_teams.server.kill_tmux_pane") as mock_kill_tmux, \
-             unittest.mock.patch("claude_teams.server.kill_desktop_process") as mock_kill_desktop:
+        with unittest.mock.patch("opencode_teams.server.kill_tmux_pane") as mock_kill_tmux, \
+             unittest.mock.patch("opencode_teams.server.kill_desktop_process") as mock_kill_desktop:
             await client.call_tool(
                 "force_kill_teammate",
                 {"team_name": "tk_d2", "agent_name": "worker"},

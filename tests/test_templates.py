@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from claude_teams.templates import (
+from opencode_teams.templates import (
     TEMPLATES,
     AgentTemplate,
     get_template,

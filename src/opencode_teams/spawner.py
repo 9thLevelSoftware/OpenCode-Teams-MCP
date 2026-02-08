@@ -12,10 +12,10 @@ import sys
 import time
 from pathlib import Path
 
-from claude_teams import messaging, teams
-from claude_teams.config_gen import generate_agent_config, write_agent_config, ensure_opencode_json
-from claude_teams.models import AgentHealthStatus, COLOR_PALETTE, InboxMessage, TeammateMember
-from claude_teams.teams import _VALID_NAME_RE
+from opencode_teams import messaging, teams
+from opencode_teams.config_gen import generate_agent_config, write_agent_config, ensure_opencode_json
+from opencode_teams.models import AgentHealthStatus, COLOR_PALETTE, InboxMessage, TeammateMember
+from opencode_teams.teams import _VALID_NAME_RE
 
 
 # OpenCode binary discovery and configuration constants
@@ -216,7 +216,7 @@ def spawn_teammate(
         custom_instructions=custom_instructions,
     )
     write_agent_config(project, name, config_content)
-    ensure_opencode_json(project, mcp_server_command="uv run claude-teams")
+    ensure_opencode_json(project, mcp_server_command="uv run opencode-teams")
 
     if backend_type == "desktop":
         if not desktop_binary:
@@ -331,7 +331,7 @@ def load_health_state(team_name: str, base_dir: Path | None = None) -> dict:
 
     Args:
         team_name: Name of the team.
-        base_dir: Override base directory (for testing). Defaults to ``~/.claude``.
+        base_dir: Override base directory (for testing). Defaults to ``~/.opencode-teams``.
 
     Returns:
         Dict keyed by agent name, each value ``{"hash": str, "last_change_time": float}``.
@@ -350,7 +350,7 @@ def save_health_state(team_name: str, state: dict, base_dir: Path | None = None)
     Args:
         team_name: Name of the team.
         state: Dict keyed by agent name with hash and timestamp.
-        base_dir: Override base directory (for testing). Defaults to ``~/.claude``.
+        base_dir: Override base directory (for testing). Defaults to ``~/.opencode-teams``.
     """
     teams_dir = (base_dir / "teams") if base_dir else teams.TEAMS_DIR
     health_path = teams_dir / team_name / "health.json"
