@@ -50,12 +50,11 @@ Plans:
   4. The config contains task management instructions (how to claim tasks, update status, report completion)
   5. The config includes the claude-teams MCP server in its tools section so the agent can access coordination primitives
   6. All tool permissions in the config are set to string "allow" (not boolean, not "ask") to prevent silent hangs
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 02-01: Config file structure and identity injection
-- [ ] 02-02: Communication and task instruction templates
-- [ ] 02-03: MCP server configuration and permission hardening
+- [ ] 02-01-PLAN.md -- Config generation module with TDD: generate_agent_config, write_agent_config, ensure_opencode_json
+- [ ] 02-02-PLAN.md -- Wire config generation into spawn flow and add cleanup on kill/shutdown
 
 ### Phase 3: Spawn Execution
 **Goal**: The system can launch an OpenCode agent in a tmux pane with a correct command, track its pane ID, and deliver an initial task prompt
@@ -156,7 +155,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Binary Discovery & Model Configuration | 2/2 | ✓ Complete | 2026-02-08 |
-| 2. Agent Config Generation | 0/3 | Not started | - |
+| 2. Agent Config Generation | 0/2 | Planning complete | - |
 | 3. Spawn Execution | 0/3 | Not started | - |
 | 4. MCP Communication Validation | 0/2 | Not started | - |
 | 5. Agent Health & Monitoring | 0/2 | Not started | - |
@@ -166,4 +165,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 
 ---
 *Roadmap created: 2026-02-07*
-*Depth: comprehensive (8 phases, 20 plans)*
+*Depth: comprehensive (8 phases, 19 plans)*
