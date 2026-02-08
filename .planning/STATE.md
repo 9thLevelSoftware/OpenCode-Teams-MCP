@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Kimi K2.5 agents in OpenCode can coordinate as teams with shared task lists and messaging
-**Current focus:** Phase 2 - Agent Config Generation
+**Current focus:** Phase 3 - Spawn Execution (complete)
 
 ## Current Position
 
-Phase: 2 of 8 (Agent Config Generation)
-Plan: 2 of 2 in current phase
+Phase: 3 of 8 (Spawn Execution)
+Plan: 1 of 1 in current phase
 Status: Phase complete
-Last activity: 2026-02-08 -- Completed 02-02-PLAN.md (Config Gen Lifecycle Wiring)
+Last activity: 2026-02-08 -- Completed 03-01-PLAN.md (OpenCode Run Command Construction)
 
-Progress: [████░░░░░░] 20%
+Progress: [█████░░░░░] 30%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: 9 minutes
-- Total execution time: 0.6 hours
+- Total plans completed: 5
+- Average duration: 8 minutes
+- Total execution time: 0.7 hours
 
 **By Phase:**
 
@@ -29,10 +29,11 @@ Progress: [████░░░░░░] 20%
 |-------|-------|-------|----------|
 | 01 | 2/2 | 30m | 15m |
 | 02 | 2/2 | 6m | 3m |
+| 03 | 1/1 | 4m | 4m |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (15m), 01-02 (15m), 02-01 (3m), 02-02 (3m)
-- Trend: Accelerating (TDD efficiency in Phase 1, rapid execution in Phase 2)
+- Last 5 plans: 01-01 (15m), 01-02 (15m), 02-01 (3m), 02-02 (3m), 03-01 (4m)
+- Trend: Sustained fast execution for targeted plans
 
 *Updated after each plan completion*
 
@@ -57,6 +58,8 @@ Recent decisions affecting current work:
 - [02-01]: ensure_opencode_json uses setdefault pattern to preserve existing config during merges
 - [02-02]: cleanup_agent_config in spawner.py, not config_gen.py, as cleanup is lifecycle concern not config generation
 - [02-02]: Use Path.cwd() as default project_dir in server.py since MCP server runs from project root
+- [03-01]: Keep build_spawn_command for Phase 8 cleanup rather than deleting now
+- [03-01]: Timeout wrapping via shell 'timeout' command inside tmux pane, not Python subprocess timeout
 
 ### Pending Todos
 
@@ -72,5 +75,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 02-02 (Config Gen Lifecycle Wiring) - Phase 2 complete, ready for Phase 3
-Resume file: .planning/phases/02-agent-config-generation/02-02-SUMMARY.md
+Stopped at: Completed 03-01 (OpenCode Run Command Construction) - Phase 3 complete, ready for Phase 4
+Resume file: .planning/phases/03-spawn-execution/03-01-SUMMARY.md
