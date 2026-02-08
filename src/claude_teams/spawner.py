@@ -195,6 +195,8 @@ def spawn_teammate(
     subagent_type: str = "general-purpose",
     role_instructions: str = "",
     custom_instructions: str = "",
+    backend_type: str = "tmux",
+    desktop_binary: str | None = None,
     cwd: str | None = None,
     plan_mode_required: bool = False,
     base_dir: Path | None = None,
@@ -221,7 +223,7 @@ def spawn_teammate(
         joined_at=now_ms,
         tmux_pane_id="",
         cwd=cwd or str(Path.cwd()),
-        backend_type="tmux",
+        backend_type=backend_type,
         is_active=False,
     )
 
@@ -250,23 +252,35 @@ def spawn_teammate(
     write_agent_config(project, name, config_content)
     ensure_opencode_json(project, mcp_server_command="uv run claude-teams")
 
-    cmd = build_opencode_run_command(member, opencode_binary)
-    result = subprocess.run(
-        ["tmux", "split-window", "-dP", "-F", "#{pane_id}", cmd],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    pane_id = result.stdout.strip()
+    if backend_type == "desktop":
+        if not desktop_binary:
+            raise ValueError("desktop_binary is required when backend_type='desktop'")
+        pid = launch_desktop_app(desktop_binary, member.cwd)
+        config = teams.read_config(team_name, base_dir)
+        for m in config.members:
+            if isinstance(m, TeammateMember) and m.name == name:
+                m.process_id = pid
+                m.backend_type = "desktop"
+                break
+        teams.write_config(team_name, config, base_dir)
+        member.process_id = pid
+    else:
+        cmd = build_opencode_run_command(member, opencode_binary)
+        result = subprocess.run(
+            ["tmux", "split-window", "-dP", "-F", "#{pane_id}", cmd],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        pane_id = result.stdout.strip()
+        config = teams.read_config(team_name, base_dir)
+        for m in config.members:
+            if isinstance(m, TeammateMember) and m.name == name:
+                m.tmux_pane_id = pane_id
+                break
+        teams.write_config(team_name, config, base_dir)
+        member.tmux_pane_id = pane_id
 
-    config = teams.read_config(team_name, base_dir)
-    for m in config.members:
-        if isinstance(m, TeammateMember) and m.name == name:
-            m.tmux_pane_id = pane_id
-            break
-    teams.write_config(team_name, config, base_dir)
-
-    member.tmux_pane_id = pane_id
     return member
 
 
@@ -401,6 +415,24 @@ def check_single_agent_health(
     Returns:
         AgentHealthStatus with the determined status and detail.
     """
+    # Desktop backend: process-based liveness only, no hung detection
+    if member.backend_type == "desktop":
+        pid = member.process_id
+        if not check_process_alive(pid):
+            return AgentHealthStatus(
+                agent_name=member.name,
+                pane_id=str(pid),
+                status="dead",
+                detail="Desktop process is no longer running",
+            )
+        return AgentHealthStatus(
+            agent_name=member.name,
+            pane_id=str(pid),
+            status="alive",
+            detail="Desktop process is running",
+        )
+
+    # Tmux backend: existing logic (unchanged)
     pane_id = member.tmux_pane_id
 
     # Step 1: pane liveness

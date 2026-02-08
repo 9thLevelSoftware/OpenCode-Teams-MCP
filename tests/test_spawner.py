@@ -1029,3 +1029,125 @@ class TestProcessLifecycle:
         monkeypatch.setattr("claude_teams.spawner.os.kill", mock_kill)
         kill_desktop_process(0)
         mock_kill.assert_not_called()
+
+
+class TestSpawnDesktopBackend:
+    @patch("claude_teams.spawner.launch_desktop_app", return_value=9999)
+    @patch("claude_teams.spawner.subprocess")
+    def test_spawn_desktop_calls_launch_desktop_app(
+        self, mock_subprocess: MagicMock, mock_launch: MagicMock,
+        tmp_claude_dir: Path, tmp_path: Path,
+    ) -> None:
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        member = spawn_teammate(
+            TEAM, "desktop-agent", "Do work",
+            "/usr/local/bin/opencode", SESSION_ID,
+            backend_type="desktop",
+            desktop_binary="/fake/opencode-desktop",
+            base_dir=tmp_claude_dir,
+            project_dir=project_dir,
+        )
+        mock_launch.assert_called_once()
+        assert mock_launch.call_args[0][0] == "/fake/opencode-desktop"
+        assert member.process_id == 9999
+        assert member.backend_type == "desktop"
+
+    def test_spawn_desktop_requires_desktop_binary(
+        self, tmp_claude_dir: Path, tmp_path: Path,
+    ) -> None:
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        with pytest.raises(ValueError, match="desktop_binary is required"):
+            spawn_teammate(
+                TEAM, "desktop-agent", "Do work",
+                "/usr/local/bin/opencode", SESSION_ID,
+                backend_type="desktop",
+                base_dir=tmp_claude_dir,
+                project_dir=project_dir,
+            )
+
+    @patch("claude_teams.spawner.launch_desktop_app", return_value=8888)
+    @patch("claude_teams.spawner.subprocess")
+    def test_spawn_desktop_stores_pid_in_config(
+        self, mock_subprocess: MagicMock, mock_launch: MagicMock,
+        tmp_claude_dir: Path, tmp_path: Path,
+    ) -> None:
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        spawn_teammate(
+            TEAM, "desktop-agent", "Do work",
+            "/usr/local/bin/opencode", SESSION_ID,
+            backend_type="desktop",
+            desktop_binary="/fake/opencode-desktop",
+            base_dir=tmp_claude_dir,
+            project_dir=project_dir,
+        )
+        config = teams.read_config(TEAM, base_dir=tmp_claude_dir)
+        found = [m for m in config.members if isinstance(m, TeammateMember) and m.name == "desktop-agent"]
+        assert len(found) == 1
+        assert found[0].process_id == 8888
+        assert found[0].backend_type == "desktop"
+
+    @patch("claude_teams.spawner.subprocess")
+    def test_spawn_tmux_still_works(
+        self, mock_subprocess: MagicMock,
+        tmp_claude_dir: Path, tmp_path: Path,
+    ) -> None:
+        teams.create_team(TEAM, session_id=SESSION_ID, base_dir=tmp_claude_dir)
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        mock_subprocess.run.return_value.stdout = "%42\n"
+        member = spawn_teammate(
+            TEAM, "tmux-agent", "Do work",
+            "/usr/local/bin/opencode", SESSION_ID,
+            backend_type="tmux",
+            base_dir=tmp_claude_dir,
+            project_dir=project_dir,
+        )
+        mock_subprocess.run.assert_called_once()
+        call_args = mock_subprocess.run.call_args[0][0]
+        assert "tmux" in call_args[0]
+        assert member.tmux_pane_id == "%42"
+        assert member.backend_type == "tmux"
+
+
+class TestDesktopHealthCheck:
+    def test_desktop_alive(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        member = TeammateMember(
+            agent_id="agent@team", name="agent", agent_type="general-purpose",
+            model="kimi-k2.5", prompt="work", color="blue", joined_at=0,
+            tmux_pane_id="", cwd="/tmp", backend_type="desktop", process_id=1234,
+        )
+        monkeypatch.setattr("claude_teams.spawner.check_process_alive", lambda pid: True)
+        result = check_single_agent_health(member, None, None)
+        assert result.status == "alive"
+        assert "running" in result.detail
+
+    def test_desktop_dead(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        member = TeammateMember(
+            agent_id="agent@team", name="agent", agent_type="general-purpose",
+            model="kimi-k2.5", prompt="work", color="blue", joined_at=0,
+            tmux_pane_id="", cwd="/tmp", backend_type="desktop", process_id=1234,
+        )
+        monkeypatch.setattr("claude_teams.spawner.check_process_alive", lambda pid: False)
+        result = check_single_agent_health(member, None, None)
+        assert result.status == "dead"
+        assert "no longer running" in result.detail
+
+    def test_desktop_never_reports_hung(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        member = TeammateMember(
+            agent_id="agent@team", name="agent", agent_type="general-purpose",
+            model="kimi-k2.5", prompt="work", color="blue", joined_at=0,
+            tmux_pane_id="", cwd="/tmp", backend_type="desktop", process_id=1234,
+        )
+        monkeypatch.setattr("claude_teams.spawner.check_process_alive", lambda pid: True)
+        # Simulate conditions that would trigger "hung" for tmux backend
+        result = check_single_agent_health(
+            member, "samehash", time.time() - 300, hung_timeout=120,
+        )
+        assert result.status == "alive"
+        assert result.status != "hung"
