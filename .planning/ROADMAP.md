@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: MCP Communication Validation** - Verify spawned agents can exchange messages and share state through the MCP server ✓
 - [x] **Phase 5: Agent Health & Monitoring** - Detect dead/hung agents and force-kill unresponsive instances ✓
 - [x] **Phase 6: Agent Templates** - Pre-built role templates for common agent specializations ✓
-- [ ] **Phase 7: Desktop Spawning** - Support launching OpenCode desktop app as an alternative to CLI
+- [x] **Phase 7: Desktop Spawning** - Support launching OpenCode desktop app as an alternative to CLI ✓
 - [ ] **Phase 8: Legacy Cleanup** - Remove all Claude Code-specific code paths, update tests and documentation
 
 ## Phase Details
@@ -124,8 +124,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 07-01-PLAN.md -- Desktop binary discovery, process launch/liveness/kill functions, TeammateMember process_id field
-- [ ] 07-02-PLAN.md -- Wire desktop backend into spawn flow, MCP tools, force_kill branching, health check branching
+- [x] 07-01-PLAN.md -- Desktop binary discovery, process launch/liveness/kill functions, TeammateMember process_id field ✓
+- [x] 07-02-PLAN.md -- Wire desktop backend into spawn flow, MCP tools, force_kill branching, health check branching ✓
 
 ### Phase 8: Legacy Cleanup
 **Goal**: All Claude Code-specific code is removed, all tests pass against the new OpenCode spawning, and documentation reflects the current system
@@ -158,7 +158,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8
 | 4. MCP Communication Validation | 2/2 | ✓ Complete | 2026-02-08 |
 | 5. Agent Health & Monitoring | 2/2 | ✓ Complete | 2026-02-08 |
 | 6. Agent Templates | 2/2 | ✓ Complete | 2026-02-08 |
-| 7. Desktop Spawning | 0/2 | Not started | - |
+| 7. Desktop Spawning | 2/2 | ✓ Complete | 2026-02-08 |
 | 8. Legacy Cleanup | 0/4 | Not started | - |
 
 ---
