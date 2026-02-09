@@ -789,7 +789,10 @@ def main():
     _log_activity("MAIN STARTING")
 
     try:
-        mcp.run()
+        # Disable FastMCP's Rich banner for stdio transport:
+        # 1. It crashes on Windows cp1252 consoles (Unicode block chars)
+        # 2. stdout must stay clean for MCP JSON-RPC protocol
+        mcp.run(transport="stdio", show_banner=False)
     except Exception as e:
         _log_activity(f"MAIN EXCEPTION: {type(e).__name__}: {e}")
         raise
