@@ -23,8 +23,6 @@ from opencode_teams.spawner import (
     cleanup_agent_config,
     discover_desktop_binary,
     discover_opencode_binary,
-    get_credential_env_var,
-    get_provider_config,
     kill_desktop_process,
     kill_tmux_pane,
     launch_desktop_app,
@@ -39,11 +37,14 @@ from opencode_teams.spawner import (
     DESKTOP_BINARY_NAMES,
     DESKTOP_PATHS,
     MINIMUM_OPENCODE_VERSION,
-    MODEL_ALIASES,
-    PROVIDER_CONFIGS,
-    PROVIDER_MODEL_MAP,
     SPAWN_TIMEOUT_SECONDS,
 )
+from opencode_teams.model_discovery import (
+    discover_models,
+    resolve_model_string,
+    select_model_by_preference,
+)
+from opencode_teams.models import ModelInfo, ModelPreference
 
 
 TEAM = "test-team"
@@ -481,82 +482,200 @@ class TestValidateOpencodeVersion:
             validate_opencode_version("/usr/local/bin/opencode")
 
 
+class TestModelDiscovery:
+    """Tests for dynamic model discovery from OpenCode config."""
+
+    def test_discover_models_from_dict(self) -> None:
+        """Test discovering models from a config dict."""
+        config = {
+            "provider": {
+                "openai": {
+                    "models": {
+                        "gpt-5.2-medium": {
+                            "name": "GPT 5.2 Medium",
+                            "limit": {"context": 272000, "output": 128000},
+                            "modalities": {"input": ["text", "image"], "output": ["text"]},
+                            "options": {"reasoningEffort": "medium"},
+                        }
+                    }
+                }
+            }
+        }
+        models = discover_models(config)
+        assert len(models) == 1
+        assert models[0].provider == "openai"
+        assert models[0].model_id == "gpt-5.2-medium"
+        assert models[0].full_model_string == "openai/gpt-5.2-medium"
+        assert models[0].context_window == 272000
+        assert models[0].reasoning_effort == "medium"
+
+    def test_discover_models_multiple_providers(self) -> None:
+        """Test discovering models from multiple providers."""
+        config = {
+            "provider": {
+                "openai": {"models": {"gpt-5": {"name": "GPT 5"}}},
+                "google": {"models": {"gemini-3": {"name": "Gemini 3"}}},
+            }
+        }
+        models = discover_models(config)
+        assert len(models) == 2
+        providers = {m.provider for m in models}
+        assert providers == {"openai", "google"}
+
+    def test_discover_models_empty_config(self) -> None:
+        """Test with empty config returns empty list."""
+        assert discover_models({}) == []
+        assert discover_models({"provider": {}}) == []
+
+
+class TestModelSelection:
+    """Tests for preference-based model selection."""
+
+    @pytest.fixture
+    def sample_models(self) -> list[ModelInfo]:
+        return [
+            ModelInfo(
+                provider="openai",
+                model_id="gpt-5.2-low",
+                name="GPT 5.2 Low",
+                full_model_string="openai/gpt-5.2-low",
+                context_window=272000,
+                max_output=128000,
+                input_modalities=["text", "image"],
+                output_modalities=["text"],
+                reasoning_effort="low",
+            ),
+            ModelInfo(
+                provider="openai",
+                model_id="gpt-5.2-high",
+                name="GPT 5.2 High",
+                full_model_string="openai/gpt-5.2-high",
+                context_window=272000,
+                max_output=128000,
+                input_modalities=["text", "image"],
+                output_modalities=["text"],
+                reasoning_effort="high",
+            ),
+            ModelInfo(
+                provider="google",
+                model_id="gemini-3-flash",
+                name="Gemini 3 Flash",
+                full_model_string="google/gemini-3-flash",
+                context_window=1048576,
+                max_output=65536,
+                input_modalities=["text", "image", "pdf"],
+                output_modalities=["text"],
+                reasoning_effort=None,
+            ),
+        ]
+
+    def test_select_by_reasoning_effort(self, sample_models: list[ModelInfo]) -> None:
+        """Test selecting model by reasoning effort."""
+        pref = ModelPreference(reasoning_effort="high")
+        selected = select_model_by_preference(sample_models, pref)
+        assert selected is not None
+        assert selected.reasoning_effort == "high"
+
+    def test_select_prefer_speed(self, sample_models: list[ModelInfo]) -> None:
+        """Test prefer_speed selects lower reasoning models."""
+        pref = ModelPreference(prefer_speed=True)
+        selected = select_model_by_preference(sample_models, pref)
+        assert selected is not None
+        # Should prefer low reasoning over high
+        assert selected.reasoning_effort in ("low", None)
+
+    def test_select_by_provider(self, sample_models: list[ModelInfo]) -> None:
+        """Test filtering by provider."""
+        pref = ModelPreference(provider="google")
+        selected = select_model_by_preference(sample_models, pref)
+        assert selected is not None
+        assert selected.provider == "google"
+
+    def test_select_by_min_context(self, sample_models: list[ModelInfo]) -> None:
+        """Test filtering by minimum context window."""
+        pref = ModelPreference(min_context_window=500000)
+        selected = select_model_by_preference(sample_models, pref)
+        assert selected is not None
+        assert selected.context_window >= 500000
+
+    def test_select_no_match(self, sample_models: list[ModelInfo]) -> None:
+        """Test returns None when no models match constraints."""
+        pref = ModelPreference(provider="anthropic")
+        selected = select_model_by_preference(sample_models, pref)
+        assert selected is None
+
+
+class TestResolveModelString:
+    """Tests for model string resolution."""
+
+    @pytest.fixture
+    def sample_models(self) -> list[ModelInfo]:
+        return [
+            ModelInfo(
+                provider="openai",
+                model_id="gpt-5.2-medium",
+                name="GPT 5.2 Medium",
+                full_model_string="openai/gpt-5.2-medium",
+                context_window=272000,
+                max_output=128000,
+            ),
+        ]
+
+    def test_passthrough_full_string(self, sample_models: list[ModelInfo]) -> None:
+        """Full provider/model strings pass through unchanged."""
+        result = resolve_model_string("openai/gpt-5.2-medium", sample_models)
+        assert result == "openai/gpt-5.2-medium"
+
+    def test_resolve_by_model_id(self, sample_models: list[ModelInfo]) -> None:
+        """Model IDs are resolved to full strings."""
+        result = resolve_model_string("gpt-5.2-medium", sample_models)
+        assert result == "openai/gpt-5.2-medium"
+
+    def test_auto_selects_model(self, sample_models: list[ModelInfo]) -> None:
+        """'auto' selects a model based on preferences."""
+        result = resolve_model_string("auto", sample_models)
+        assert result == "openai/gpt-5.2-medium"
+
+    def test_unknown_model_passthrough(self, sample_models: list[ModelInfo]) -> None:
+        """Unknown model IDs pass through for OpenCode to validate."""
+        result = resolve_model_string("unknown-model", sample_models)
+        assert result == "unknown-model"
+
+
 class TestTranslateModel:
-    def test_sonnet_moonshot(self) -> None:
-        assert translate_model("sonnet", "moonshot-ai") == "moonshot-ai/kimi-k2.5"
-
-    def test_opus_moonshot(self) -> None:
-        assert translate_model("opus", "moonshot-ai") == "moonshot-ai/kimi-k2.5"
-
-    def test_haiku_openrouter(self) -> None:
-        assert (
-            translate_model("haiku", "openrouter")
-            == "openrouter/moonshotai/kimi-k2.5"
-        )
-
-    def test_sonnet_novita(self) -> None:
-        assert translate_model("sonnet", "novita") == "novita/moonshotai/kimi-k2.5"
+    """Tests for translate_model function which wraps model_discovery."""
 
     def test_passthrough_provider_model(self) -> None:
-        assert (
-            translate_model("moonshot-ai/kimi-k2.5") == "moonshot-ai/kimi-k2.5"
-        )
+        """Full provider/model strings pass through unchanged."""
+        # Create mock models list
+        models = [
+            ModelInfo(
+                provider="openai",
+                model_id="gpt-5",
+                name="GPT 5",
+                full_model_string="openai/gpt-5",
+            )
+        ]
+        result = translate_model("openai/gpt-5", models=models)
+        assert result == "openai/gpt-5"
 
     def test_passthrough_arbitrary(self) -> None:
-        assert translate_model("custom/my-model") == "custom/my-model"
+        """Arbitrary provider/model strings pass through."""
+        result = translate_model("custom/my-model", models=[])
+        assert result == "custom/my-model"
 
-    def test_unknown_alias_as_model_name(self) -> None:
-        assert translate_model("kimi-k2.5", "moonshot-ai") == "moonshot-ai/kimi-k2.5"
-
-    def test_default_provider(self) -> None:
-        assert translate_model("sonnet") == "moonshot-ai/kimi-k2.5"
-
-
-class TestGetProviderConfig:
-    def test_moonshot_ai(self) -> None:
-        result = get_provider_config("moonshot-ai")
-        assert "moonshot-ai" in result
-        assert result["moonshot-ai"]["apiKey"] == "{env:MOONSHOT_API_KEY}"
-
-    def test_openrouter(self) -> None:
-        result = get_provider_config("openrouter")
-        assert result["openrouter"]["apiKey"] == "{env:OPENROUTER_API_KEY}"
-
-    def test_novita_has_base_url(self) -> None:
-        result = get_provider_config("novita")
-        assert (
-            result["novita"]["options"]["baseURL"]
-            == "https://api.novita.ai/openai"
-        )
-
-    def test_novita_has_npm_package(self) -> None:
-        result = get_provider_config("novita")
-        assert "npm" in result["novita"]
-
-    def test_unknown_provider_raises(self) -> None:
-        with pytest.raises(ValueError, match="Unknown provider"):
-            get_provider_config("unknown-provider")
-
-    def test_no_hardcoded_keys(self) -> None:
-        for provider in PROVIDER_CONFIGS.keys():
-            result = get_provider_config(provider)
-            result_str = str(result)
-            assert "sk-" not in result_str
-            assert "{env:" in result_str
-
-
-class TestGetCredentialEnvVar:
-    def test_moonshot(self) -> None:
-        assert get_credential_env_var("moonshot-ai") == "MOONSHOT_API_KEY"
-
-    def test_openrouter(self) -> None:
-        assert get_credential_env_var("openrouter") == "OPENROUTER_API_KEY"
-
-    def test_novita(self) -> None:
-        assert get_credential_env_var("novita") == "NOVITA_API_KEY"
-
-    def test_unknown_fallback(self) -> None:
-        assert get_credential_env_var("my-custom") == "MY_CUSTOM_API_KEY"
+    def test_auto_with_models(self) -> None:
+        """Auto selection works with available models."""
+        models = [
+            ModelInfo(
+                provider="google",
+                model_id="gemini-3",
+                name="Gemini 3",
+                full_model_string="google/gemini-3",
+            )
+        ]
+        result = translate_model("auto", models=models)
+        assert result == "google/gemini-3"
 
 
 class TestConfigGenIntegration:

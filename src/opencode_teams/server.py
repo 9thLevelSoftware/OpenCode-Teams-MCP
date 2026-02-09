@@ -9,10 +9,12 @@ from fastmcp.exceptions import ToolError
 from fastmcp.server.lifespan import lifespan
 
 from opencode_teams import messaging, tasks, teams
+from opencode_teams.model_discovery import discover_models, resolve_model_string
 from opencode_teams.models import (
     AgentHealthStatus,
     COLOR_PALETTE,
     InboxMessage,
+    ModelPreference,
     SendMessageResult,
     ShutdownApproved,
     SpawnResult,
@@ -32,7 +34,6 @@ from opencode_teams.spawner import (
     load_health_state,
     save_health_state,
     spawn_teammate,
-    translate_model,
 )
 
 
@@ -40,20 +41,28 @@ from opencode_teams.spawner import (
 async def app_lifespan(server):
     import logging
     logger = logging.getLogger("opencode-teams")
-    
+
     opencode_binary = None
     try:
         opencode_binary = discover_opencode_binary()
     except (FileNotFoundError, RuntimeError) as e:
         # Log but don't fail - the error will be reported when tools are called
         logger.warning(f"OpenCode binary not available: {e}")
-    
+
+    # Discover available models from OpenCode config
+    available_models = discover_models()
+    if not available_models:
+        logger.warning(
+            "No models found in OpenCode config. "
+            "Configure providers in ~/.config/opencode/opencode.json"
+        )
+
     session_id = str(uuid.uuid4())
     yield {
         "opencode_binary": opencode_binary,
         "session_id": session_id,
         "active_team": None,
-        "provider": "moonshot-ai"
+        "available_models": available_models,
     }
 
 
@@ -75,8 +84,14 @@ Do NOT create your own coordination frameworks or agent patterns.
 - `read_config(team_name)` — Read team config and members.
 - `server_status()` — Check MCP server health.
 
+### Model Discovery
+- `list_available_models(provider?, reasoning_effort?)` — List available models from OpenCode config.
+
 ### Agent Spawning
-- `spawn_teammate(team_name, name, prompt, instructions, model, backend)` — Spawn a new agent.
+- `spawn_teammate(team_name, name, prompt, instructions, model, reasoning_effort, prefer_speed, backend)` — Spawn agent.
+  - `model="auto"` (default): Selects best model based on preferences.
+  - `reasoning_effort`: "none", "low", "medium", "high", "xhigh" — guides auto-selection.
+  - `prefer_speed=True`: Prefer faster models over more capable ones.
 - `force_kill_teammate(team_name, agent_name)` — Force-stop an agent.
 - `check_agent_health(team_name, agent_name)` — Check if agent is alive/dead/hung.
 - `check_all_agents_health(team_name)` — Check health of all agents.
@@ -93,12 +108,13 @@ Do NOT create your own coordination frameworks or agent patterns.
 - `task_get(team_name, task_id)` — Get task details.
 
 ## Workflow
-1. `team_create` — create the team
-2. `task_create` — create tasks for the work
-3. `spawn_teammate` — spawn agents with task-specific `instructions` tailored to the problem
-4. `check_all_agents_health` + `read_inbox` — monitor progress
-5. `send_message(type="shutdown_request")` — shut down agents when done
-6. `team_delete` — clean up
+1. `list_available_models` — (optional) see what models are configured
+2. `team_create` — create the team
+3. `task_create` — create tasks for the work
+4. `spawn_teammate` — spawn agents with task-specific `instructions` tailored to the problem
+5. `check_all_agents_health` + `read_inbox` — monitor progress
+6. `send_message(type="shutdown_request")` — shut down agents when done
+7. `team_delete` — clean up
 
 Agent configs are generated dynamically per-spawn and purged on shutdown/kill.
 
@@ -116,14 +132,46 @@ def server_status(ctx: Context) -> dict:
     """Check MCP server health. Returns session info, active team, and server version.
     Use this tool to verify the MCP connection is working correctly."""
     ls = _get_lifespan(ctx)
+    models = ls.get("available_models", [])
     return {
         "status": "ok",
         "server": "opencode-teams",
         "session_id": ls.get("session_id", "unknown"),
         "active_team": ls.get("active_team"),
         "opencode_binary": ls.get("opencode_binary") or "not found",
-        "provider": ls.get("provider", "unknown"),
+        "available_models_count": len(models),
     }
+
+
+@mcp.tool
+def list_available_models(
+    ctx: Context,
+    provider: str | None = None,
+    reasoning_effort: str | None = None,
+) -> list[dict]:
+    """List all available models from OpenCode configuration.
+
+    Models are discovered from ~/.config/opencode/opencode.json and project opencode.json.
+    Use this to see what models can be used with spawn_teammate.
+
+    Args:
+        provider: Optional filter by provider (e.g., "openai", "google").
+        reasoning_effort: Optional filter by reasoning level ("none", "low", "medium", "high", "xhigh").
+
+    Returns:
+        List of model info dicts with provider, modelId, name, contextWindow, etc.
+    """
+    ls = _get_lifespan(ctx)
+    models = ls.get("available_models", [])
+
+    # Apply filters
+    filtered = models
+    if provider:
+        filtered = [m for m in filtered if m.provider == provider]
+    if reasoning_effort:
+        filtered = [m for m in filtered if m.reasoning_effort == reasoning_effort]
+
+    return [m.model_dump(by_alias=True) for m in filtered]
 
 
 @mcp.tool
@@ -165,14 +213,20 @@ def spawn_teammate_tool(
     prompt: str,
     ctx: Context,
     instructions: str = "",  # Task-specific system prompt instructions for this agent
-    model: str = "sonnet",  # Accepts: "sonnet", "opus", "haiku", or "provider/model"
+    model: str = "auto",  # "auto", model_id, or full "provider/model" string
+    reasoning_effort: str | None = None,  # Preference: "none", "low", "medium", "high", "xhigh"
+    prefer_speed: bool = False,  # Prefer faster models over more capable ones
     plan_mode_required: bool = False,
     backend: str = "auto",  # "auto", "tmux", "windows_terminal", or "desktop"
 ) -> dict:
     """Spawn a new OpenCode teammate with dynamically generated configuration.
 
-    Agent configs are created on spawn and purged on shutdown/kill.
-    Use `instructions` to tailor the agent's role and behavior for the specific task.
+    Model selection:
+    - 'auto' (default): Automatically selects best available model based on preferences.
+    - model_id: Use a specific model (e.g., "gpt-5.2-medium", "gemini-3-flash").
+    - provider/model: Full model string (e.g., "openai/gpt-5.2-high").
+
+    Use `reasoning_effort` and `prefer_speed` to guide automatic model selection.
 
     Backend options:
     - 'auto' (default): Uses tmux if available, windows_terminal on Windows, otherwise desktop app
@@ -180,8 +234,8 @@ def spawn_teammate_tool(
     - 'windows_terminal': Spawn in a new PowerShell window (Windows only)
     - 'desktop': Launch the OpenCode desktop app (GUI, requires manual interaction)
 
-    All spawned agents connect to this MCP server via the project's opencode.json,
-    enabling communication through file-based inboxes.
+    Agent configs are created on spawn and purged on shutdown/kill.
+    Use `instructions` to tailor the agent's role and behavior for the specific task.
 
     The teammate receives its initial prompt via inbox and begins working
     autonomously. Names must be unique within the team."""
@@ -193,7 +247,18 @@ def spawn_teammate_tool(
             "Please ensure opencode CLI v1.1.52+ is installed and on PATH. "
             "Install with: npm install -g opencode@latest"
         )
-    resolved_model = translate_model(model, provider=ls.get("provider", "moonshot-ai"))
+
+    # Build preference for model selection
+    preference = ModelPreference(
+        reasoning_effort=reasoning_effort,
+        prefer_speed=prefer_speed,
+    )
+    available_models = ls.get("available_models", [])
+
+    try:
+        resolved_model = resolve_model_string(model, available_models, preference)
+    except ValueError as e:
+        raise ToolError(str(e))
 
     # Resolve backend: auto-detect best option
     effective_backend = backend

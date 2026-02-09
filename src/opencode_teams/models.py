@@ -176,3 +176,35 @@ class AgentHealthStatus(BaseModel):
     status: Literal["alive", "dead", "hung", "unknown"]
     last_content_hash: str | None = Field(alias="lastContentHash", default=None)
     detail: str = ""
+
+
+class ModelInfo(BaseModel):
+    """Represents a discovered model from OpenCode configuration."""
+
+    model_config = {"populate_by_name": True}
+
+    provider: str
+    model_id: str = Field(alias="modelId")
+    name: str
+    full_model_string: str = Field(alias="fullModelString")
+    context_window: int = Field(alias="contextWindow", default=0)
+    max_output: int = Field(alias="maxOutput", default=0)
+    input_modalities: list[str] = Field(alias="inputModalities", default_factory=lambda: ["text"])
+    output_modalities: list[str] = Field(alias="outputModalities", default_factory=lambda: ["text"])
+    reasoning_effort: Literal["none", "low", "medium", "high", "xhigh"] | None = Field(
+        alias="reasoningEffort", default=None
+    )
+
+
+class ModelPreference(BaseModel):
+    """Preferences for model selection."""
+
+    model_config = {"populate_by_name": True}
+
+    reasoning_effort: Literal["none", "low", "medium", "high", "xhigh"] | None = Field(
+        alias="reasoningEffort", default=None
+    )
+    min_context_window: int | None = Field(alias="minContextWindow", default=None)
+    required_modalities: list[str] | None = Field(alias="requiredModalities", default=None)
+    provider: str | None = None
+    prefer_speed: bool = Field(alias="preferSpeed", default=False)

@@ -40,76 +40,7 @@ def is_windows() -> bool:
 
 # OpenCode binary discovery and configuration constants
 MINIMUM_OPENCODE_VERSION = (1, 1, 52)
-DEFAULT_PROVIDER = "moonshot-ai"
 SPAWN_TIMEOUT_SECONDS = 300
-
-# Kimi K2.5 is the only supported model; all Claude aliases are equivalent
-MODEL_ALIASES: dict[str, str] = {
-    "sonnet": "kimi-k2.5",
-    "opus": "kimi-k2.5",
-    "haiku": "kimi-k2.5",
-}
-
-PROVIDER_MODEL_MAP: dict[str, str] = {
-    "moonshot-ai": "moonshot-ai/kimi-k2.5",
-    "moonshot-ai-china": "moonshot-ai-china/kimi-k2.5",
-    "openrouter": "openrouter/moonshotai/kimi-k2.5",  # Note: no hyphen in moonshotai
-    "novita": "novita/moonshotai/kimi-k2.5",
-}
-
-PROVIDER_CONFIGS: dict[str, dict] = {
-    "moonshot-ai": {
-        "apiKey": "{env:MOONSHOT_API_KEY}",
-        "models": {
-            "kimi-k2.5": {
-                "contextWindow": 128000,
-                "maxOutputTokens": 16384,
-            },
-        },
-    },
-    "moonshot-ai-china": {
-        "apiKey": "{env:MOONSHOT_API_KEY}",
-        "options": {
-            "baseURL": "https://api.moonshot.cn/v1",
-        },
-        "models": {
-            "kimi-k2.5": {
-                "contextWindow": 128000,
-                "maxOutputTokens": 16384,
-            },
-        },
-    },
-    "openrouter": {
-        "apiKey": "{env:OPENROUTER_API_KEY}",
-        "models": {
-            "moonshotai/kimi-k2.5": {
-                "contextWindow": 128000,
-                "maxOutputTokens": 16384,
-            },
-        },
-    },
-    "novita": {
-        "npm": "@opencode/provider-novita",
-        "name": "Novita AI",
-        "apiKey": "{env:NOVITA_API_KEY}",
-        "options": {
-            "baseURL": "https://api.novita.ai/openai",
-        },
-        "models": {
-            "moonshotai/kimi-k2.5": {
-                "contextWindow": 128000,
-                "maxOutputTokens": 16384,
-            },
-        },
-    },
-}
-
-_PROVIDER_ENV_VARS: dict[str, str] = {
-    "moonshot-ai": "MOONSHOT_API_KEY",
-    "moonshot-ai-china": "MOONSHOT_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
-    "novita": "NOVITA_API_KEY",
-}
 
 # Desktop app binary discovery constants
 DESKTOP_BINARY_ENV_VAR = "OPENCODE_DESKTOP_BINARY"
@@ -778,63 +709,28 @@ def validate_opencode_version(binary_path: str) -> str:
     return version_str
 
 
-def translate_model(model_alias: str, provider: str = DEFAULT_PROVIDER) -> str:
+def translate_model(
+    model_alias: str,
+    models: list | None = None,
+    preference: "ModelPreference | None" = None,
+) -> str:
     """Translate a model alias to a provider-specific model string.
 
-    Args:
-        model_alias: Model name or alias (e.g., "sonnet", "opus", "moonshot-ai/kimi-k2.5").
-        provider: Provider name (default: moonshot-ai).
-
-    Returns:
-        Full provider/model string (e.g., "moonshot-ai/kimi-k2.5").
-    """
-    # Passthrough if already in provider/model format
-    if "/" in model_alias:
-        return model_alias
-
-    # Resolve alias to base model name
-    model_name = MODEL_ALIASES.get(model_alias, model_alias)
-
-    # Look up provider-specific model string
-    if provider in PROVIDER_MODEL_MAP:
-        return PROVIDER_MODEL_MAP[provider]
-
-    # Fallback for unknown providers
-    return f"{provider}/{model_name}"
-
-
-def get_provider_config(provider: str) -> dict:
-    """Get the configuration block for a specific provider.
+    Uses OpenCode config discovery to resolve model aliases. If the model
+    is "auto", uses preference-based selection.
 
     Args:
-        provider: Provider name (e.g., "moonshot-ai", "openrouter").
+        model_alias: Model name, alias, or "auto" for preference-based selection.
+        models: Pre-loaded list of ModelInfo objects. If None, discovers from config.
+        preference: Selection preferences (used when model_alias="auto").
 
     Returns:
-        Dictionary with provider configuration (credentials use {env:VAR_NAME} syntax).
-
-    Raises:
-        ValueError: If the provider is not supported.
+        Full provider/model string (e.g., "openai/gpt-5.2-medium").
     """
-    if provider not in PROVIDER_CONFIGS:
-        supported = ", ".join(PROVIDER_CONFIGS.keys())
-        raise ValueError(
-            f"Unknown provider: {provider!r}. Supported providers: {supported}"
-        )
+    from opencode_teams.model_discovery import discover_models, resolve_model_string
+    from opencode_teams.models import ModelPreference
 
-    return {provider: PROVIDER_CONFIGS[provider]}
+    if models is None:
+        models = discover_models()
 
-
-def get_credential_env_var(provider: str) -> str:
-    """Get the environment variable name for a provider's API key.
-
-    Args:
-        provider: Provider name (e.g., "moonshot-ai").
-
-    Returns:
-        Environment variable name (e.g., "MOONSHOT_API_KEY").
-    """
-    if provider in _PROVIDER_ENV_VARS:
-        return _PROVIDER_ENV_VARS[provider]
-
-    # Fallback for unknown providers
-    return f"{provider.upper().replace('-', '_')}_API_KEY"
+    return resolve_model_string(model_alias, models, preference)
