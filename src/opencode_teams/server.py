@@ -12,12 +12,18 @@ from fastmcp.exceptions import ToolError
 from fastmcp.server.lifespan import lifespan
 
 from opencode_teams import messaging, tasks, teams
-from opencode_teams.model_discovery import discover_models, resolve_model_string
+from opencode_teams.model_discovery import (
+    discover_models,
+    filter_models,
+    get_runtime_available_model_strings,
+    resolve_model_string,
+)
 from opencode_teams.task_analysis import infer_model_preference
 from opencode_teams.models import (
     AgentHealthStatus,
     COLOR_PALETTE,
     InboxMessage,
+    ModelInfo,
     ModelPreference,
     SendMessageResult,
     ShutdownApproved,
@@ -41,6 +47,27 @@ from opencode_teams.spawner import (
 )
 
 
+def _discover_available_models(opencode_binary: str | None) -> list[ModelInfo]:
+    """Discover spawnable models and filter stale/deprecated entries."""
+    discovered = discover_models()
+    runtime_models = get_runtime_available_model_strings(opencode_binary)
+
+    # If runtime enumeration failed, fall back to discovered config models.
+    runtime_filter = runtime_models if runtime_models else None
+    return filter_models(
+        discovered,
+        runtime_available=runtime_filter,
+        include_deprecated=False,
+    )
+
+
+def _refresh_available_models(ls: dict[str, Any]) -> list[ModelInfo]:
+    """Refresh model list from current config/runtime."""
+    models = _discover_available_models(ls.get("opencode_binary"))
+    ls["available_models"] = models
+    return models
+
+
 @lifespan
 async def app_lifespan(server):
     import logging
@@ -58,8 +85,8 @@ async def app_lifespan(server):
         logger.warning(f"OpenCode binary not available: {e}")
         _log_activity(f"OpenCode binary not found: {e}")
 
-    # Discover available models from OpenCode config
-    available_models = discover_models()
+    # Discover available models from OpenCode config/runtime
+    available_models = _discover_available_models(opencode_binary)
     if not available_models:
         logger.warning(
             "No models found in OpenCode config. "
@@ -101,11 +128,15 @@ Do NOT create your own coordination frameworks or agent patterns.
 - `server_status()` — Check MCP server health.
 
 ### Model Discovery
-- `list_available_models(provider?, reasoning_effort?)` — List available models from OpenCode config.
+- `list_available_models(provider?, reasoning_effort?)` — List currently available, spawnable models.
+  - Refreshed on every call from current config/runtime.
+  - Deprecated aliases (like `google/antigravity-*`) are excluded.
 
 ### Agent Spawning
 - `spawn_teammate(team_name, name, prompt, instructions, model, reasoning_effort, prefer_speed, backend, auto_close)` — Spawn agent.
   - `model="auto"` (default): Selects best model based on preferences.
+  - If `model` is explicit, it MUST exactly match one of `list_available_models()`.
+  - Unknown or deprecated models are rejected before spawn.
   - Model selection by task:
     - **Fast tasks**: `google/gemini-2.5-flash` or `kimi-for-coding/k2p5`
     - **Complex coding**: `openai/gpt-5.3-codex` or `openai/gpt-5.2-codex`
@@ -130,7 +161,7 @@ Do NOT create your own coordination frameworks or agent patterns.
 - `task_get(team_name, task_id)` — Get task details.
 
 ## Workflow
-1. `list_available_models` — (optional) see what models are configured
+1. `list_available_models` — get exact model strings for this run
 2. `team_create` — create the team
 3. `task_create` — create tasks for the work
 4. `spawn_teammate` — spawn agents with task-specific `instructions` tailored to the problem
@@ -154,7 +185,7 @@ def server_status(ctx: Context) -> dict:
     """Check MCP server health. Returns session info, active team, and server version.
     Use this tool to verify the MCP connection is working correctly."""
     ls = _get_lifespan(ctx)
-    models = ls.get("available_models", [])
+    models = _refresh_available_models(ls)
     return {
         "status": "ok",
         "server": "opencode-teams",
@@ -171,10 +202,10 @@ def list_available_models(
     provider: str | None = None,
     reasoning_effort: str | None = None,
 ) -> list[dict]:
-    """List all available models from OpenCode configuration.
+    """List spawnable models from current OpenCode config/runtime.
 
-    Models are discovered from ~/.config/opencode/opencode.json and project opencode.json.
-    Use this to see what models can be used with spawn_teammate.
+    Models are refreshed on every call and filtered to avoid stale/deprecated aliases.
+    Use this to get exact model strings accepted by spawn_teammate.
 
     Args:
         provider: Optional filter by provider (e.g., "openai", "google").
@@ -184,7 +215,7 @@ def list_available_models(
         List of model info dicts with provider, modelId, name, contextWindow, etc.
     """
     ls = _get_lifespan(ctx)
-    models = ls.get("available_models", [])
+    models = _refresh_available_models(ls)
 
     # Apply filters
     filtered = models
@@ -251,7 +282,8 @@ def spawn_teammate_tool(
 
     Model selection:
     - 'auto' (default): Automatically selects best available model based on preferences.
-    - provider/model: Full model string (e.g., "openai/gpt-5.2", "openai/gpt-5.3-codex", "google/gemini-2.5-flash").
+    - provider/model: Full model string from list_available_models().
+      Unknown or deprecated model strings are rejected before spawn.
 
     Tested working models:
     - OpenAI: openai/gpt-5.2, openai/gpt-5.3-codex, openai/gpt-5.2-codex, openai/gpt-5.1-codex
@@ -297,10 +329,16 @@ def spawn_teammate_tool(
             prefer_speed=prefer_speed,
         )
     preference = infer_model_preference(prompt, explicit=explicit_pref)
-    available_models = ls.get("available_models", [])
+    available_models = _refresh_available_models(ls)
 
     try:
-        resolved_model = resolve_model_string(model, available_models, preference)
+        resolved_model = resolve_model_string(
+            model,
+            available_models,
+            preference,
+            allow_unknown=False,
+            include_deprecated=False,
+        )
     except ValueError as e:
         raise ToolError(str(e))
 

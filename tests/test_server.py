@@ -545,15 +545,6 @@ class TestModelTranslationWiring:
         """Verify that spawn_teammate_tool resolves model_id to provider/model format."""
         await client.call_tool("team_create", {"team_name": "tm1"})
         import unittest.mock
-        from opencode_teams.models import ModelInfo
-
-        # Mock available_models in lifespan context
-        mock_models = [
-            ModelInfo(
-                provider="openai", model_id="gpt-5", name="GPT 5",
-                full_model_string="openai/gpt-5",
-            )
-        ]
         with unittest.mock.patch("opencode_teams.server.is_tmux_available", return_value=True), \
              unittest.mock.patch("opencode_teams.server.spawn_teammate") as mock_spawn, \
              unittest.mock.patch("opencode_teams.server.resolve_model_string", return_value="openai/gpt-5") as mock_resolve:
@@ -574,45 +565,49 @@ class TestModelTranslationWiring:
                 assert call_kwargs.kwargs.get("model") == "openai/gpt-5"
 
     async def test_spawn_passes_through_direct_model(self, client: Client):
-        """Verify that a direct provider/model string passes through unchanged."""
+        """Verify that a direct provider/model string is accepted when discovered."""
         await client.call_tool("team_create", {"team_name": "tm2"})
         import unittest.mock
+        from opencode_teams.models import ModelInfo
+
+        known_models = [
+            ModelInfo(
+                provider="openai",
+                model_id="gpt-5.2-codex-high",
+                name="GPT 5.2 Codex High",
+                full_model_string="openai/gpt-5.2-codex-high",
+            )
+        ]
         with unittest.mock.patch("opencode_teams.server.is_tmux_available", return_value=True), \
+             unittest.mock.patch("opencode_teams.server._refresh_available_models", return_value=known_models), \
              unittest.mock.patch("opencode_teams.server.spawn_teammate") as mock_spawn:
             mock_spawn.return_value = TeammateMember(
                 agent_id="worker@tm2", name="worker", agent_type="general-purpose",
-                model="openrouter/moonshotai/kimi-k2.5", prompt="do work", color="blue",
+                model="openai/gpt-5.2-codex-high", prompt="do work", color="blue",
                 joined_at=0, tmux_pane_id="%1", cwd="/tmp",
             )
             await client.call_tool("spawn_teammate", {
                 "team_name": "tm2", "name": "worker", "prompt": "do work",
-                "model": "openrouter/moonshotai/kimi-k2.5",
+                "model": "openai/gpt-5.2-codex-high",
             })
             call_kwargs = mock_spawn.call_args
             assert call_kwargs is not None
             if call_kwargs.kwargs:
-                assert call_kwargs.kwargs.get("model") == "openrouter/moonshotai/kimi-k2.5"
+                assert call_kwargs.kwargs.get("model") == "openai/gpt-5.2-codex-high"
 
-    async def test_spawn_unknown_model_passthrough(self, client: Client):
-        """Verify that unknown model aliases pass through unchanged (OpenCode validates)."""
+    async def test_spawn_unknown_model_rejected(self, client: Client):
+        """Verify that unknown models are rejected before spawn."""
         await client.call_tool("team_create", {"team_name": "tm3"})
         import unittest.mock
-        with unittest.mock.patch("opencode_teams.server.is_tmux_available", return_value=True), \
-             unittest.mock.patch("opencode_teams.server.spawn_teammate") as mock_spawn:
-            mock_spawn.return_value = TeammateMember(
-                agent_id="worker@tm3", name="worker", agent_type="general-purpose",
-                model="sonnet", prompt="do work", color="blue",
-                joined_at=0, tmux_pane_id="%1", cwd="/tmp",
-            )
-            # When no models are configured, unknown aliases pass through
-            await client.call_tool("spawn_teammate", {
+        result = await client.call_tool(
+            "spawn_teammate",
+            {
                 "team_name": "tm3", "name": "worker", "prompt": "do work", "model": "sonnet",
-            })
-            call_kwargs = mock_spawn.call_args
-            assert call_kwargs is not None
-            # Without configured models, "sonnet" passes through for OpenCode to validate
-            if call_kwargs.kwargs:
-                assert call_kwargs.kwargs.get("model") == "sonnet"
+            },
+            raise_on_error=False,
+        )
+        assert result.is_error is True
+        assert "Unknown model" in result.content[0].text
 
 
 class TestSpawnWithDynamicInstructions:

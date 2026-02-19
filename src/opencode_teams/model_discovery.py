@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any, Literal
 
@@ -101,6 +103,66 @@ def _parse_reasoning_effort(
     if effort in ("none", "low", "medium", "high", "xhigh"):
         return effort
     return None
+
+
+def get_runtime_available_model_strings(opencode_binary: str | None = None) -> set[str]:
+    """Get model strings currently reported by `opencode models`.
+
+    Returns an empty set if the binary is unavailable or the command fails.
+    """
+    binary = opencode_binary or shutil.which("opencode")
+    if not binary:
+        return set()
+
+    try:
+        result = subprocess.run(
+            [binary, "models"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return set()
+
+    if result.returncode != 0:
+        return set()
+
+    models: set[str] = set()
+    for line in result.stdout.splitlines():
+        value = line.strip()
+        if not value or value.startswith("#"):
+            continue
+        token = value.split()[0]
+        if "/" in token:
+            models.add(token)
+    return models
+
+
+def is_deprecated_model(model: str) -> bool:
+    """Return True for model strings we should avoid by default."""
+    return model.startswith("google/antigravity-")
+
+
+def filter_models(
+    models: list[ModelInfo],
+    *,
+    runtime_available: set[str] | None = None,
+    include_deprecated: bool = False,
+) -> list[ModelInfo]:
+    """Filter discovered models for runtime validity and deprecated aliases."""
+    filtered: list[ModelInfo] = []
+    for model in models:
+        full = model.full_model_string
+
+        if runtime_available is not None and full not in runtime_available:
+            continue
+        if not include_deprecated and is_deprecated_model(full):
+            continue
+
+        filtered.append(model)
+
+    filtered.sort(key=lambda m: (m.provider, m.model_id))
+    return filtered
 
 
 def discover_models(config: dict[str, Any] | None = None) -> list[ModelInfo]:
@@ -270,6 +332,9 @@ def resolve_model_string(
     model: str,
     models: list[ModelInfo] | None = None,
     preference: ModelPreference | None = None,
+    *,
+    allow_unknown: bool = True,
+    include_deprecated: bool = False,
 ) -> str:
     """Resolve a model alias or preference to a full provider/model string.
 
@@ -293,26 +358,50 @@ def resolve_model_string(
     if models is None:
         models = discover_models()
 
+    candidate_models = filter_models(models, include_deprecated=include_deprecated)
+    known_full_strings = {m.full_model_string for m in candidate_models}
+
+    def _known_examples(limit: int = 10) -> str:
+        sample = sorted(known_full_strings)[:limit]
+        if not sample:
+            return "(none discovered)"
+        return ", ".join(sample)
+
     # Case 1: auto selection
     if model == "auto":
         pref = preference or ModelPreference()
-        selected = select_model_by_preference(models, pref)
+        selected = select_model_by_preference(candidate_models, pref)
         if selected:
             return selected.full_model_string
         # Fallback: first available model
-        if models:
-            return models[0].full_model_string
+        if candidate_models:
+            return candidate_models[0].full_model_string
         raise ValueError("No models available. Configure providers in opencode.json.")
 
     # Case 2: already full provider/model string
     if "/" in model:
+        if is_deprecated_model(model) and not include_deprecated:
+            raise ValueError(
+                f"Model {model!r} is deprecated. "
+                "Use list_available_models() to pick a current model."
+            )
+        if not allow_unknown and model not in known_full_strings:
+            raise ValueError(
+                f"Model {model!r} is not in list_available_models(). "
+                f"Known models include: {_known_examples()}"
+            )
         return model
 
     # Case 3: search by model_id
-    for m in models:
+    for m in candidate_models:
         if m.model_id == model:
             return m.full_model_string
 
     # Case 4: no match found - return as-is (OpenCode will validate)
     # This allows users to specify models not in config
+    if not allow_unknown:
+        raise ValueError(
+            f"Unknown model {model!r}. "
+            f"Use one of: {_known_examples()}"
+        )
     return model

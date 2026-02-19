@@ -9,6 +9,8 @@ import pytest
 
 from opencode_teams.model_discovery import (
     discover_models,
+    filter_models,
+    is_deprecated_model,
     load_opencode_config,
     resolve_model_string,
     select_model_by_preference,
@@ -326,7 +328,78 @@ class TestResolveModelString:
         result = resolve_model_string("unknown-model", sample_models)
         assert result == "unknown-model"
 
+    def test_unknown_model_strict_raises(self, sample_models: list[ModelInfo]) -> None:
+        """Unknown model IDs raise in strict mode."""
+        with pytest.raises(ValueError, match="Unknown model"):
+            resolve_model_string(
+                "unknown-model",
+                sample_models,
+                allow_unknown=False,
+            )
+
     def test_auto_with_no_models_raises(self) -> None:
         """'auto' with no models raises ValueError."""
         with pytest.raises(ValueError, match="No models available"):
             resolve_model_string("auto", [])
+
+    def test_deprecated_model_rejected_by_default(self, sample_models: list[ModelInfo]) -> None:
+        """Deprecated aliases are rejected unless explicitly allowed."""
+        with pytest.raises(ValueError, match="deprecated"):
+            resolve_model_string(
+                "google/antigravity-claude-sonnet-4-5",
+                sample_models,
+            )
+
+    def test_deprecated_model_allowed_when_requested(self, sample_models: list[ModelInfo]) -> None:
+        """Deprecated aliases can be allowed explicitly."""
+        result = resolve_model_string(
+            "google/antigravity-claude-sonnet-4-5",
+            sample_models,
+            include_deprecated=True,
+        )
+        assert result == "google/antigravity-claude-sonnet-4-5"
+
+
+class TestModelFiltering:
+    def test_is_deprecated_model(self) -> None:
+        assert is_deprecated_model("google/antigravity-claude-sonnet-4-5")
+        assert not is_deprecated_model("openai/gpt-5.2")
+
+    def test_filter_models_excludes_deprecated_by_default(self) -> None:
+        models = [
+            ModelInfo(
+                provider="google",
+                model_id="antigravity-claude-sonnet-4-5",
+                name="Deprecated",
+                full_model_string="google/antigravity-claude-sonnet-4-5",
+            ),
+            ModelInfo(
+                provider="openai",
+                model_id="gpt-5.2",
+                name="GPT 5.2",
+                full_model_string="openai/gpt-5.2",
+            ),
+        ]
+        filtered = filter_models(models)
+        assert [m.full_model_string for m in filtered] == ["openai/gpt-5.2"]
+
+    def test_filter_models_honors_runtime_available(self) -> None:
+        models = [
+            ModelInfo(
+                provider="openai",
+                model_id="gpt-5.2",
+                name="GPT 5.2",
+                full_model_string="openai/gpt-5.2",
+            ),
+            ModelInfo(
+                provider="google",
+                model_id="gemini-2.5-pro",
+                name="Gemini",
+                full_model_string="google/gemini-2.5-pro",
+            ),
+        ]
+        filtered = filter_models(
+            models,
+            runtime_available={"google/gemini-2.5-pro"},
+        )
+        assert [m.full_model_string for m in filtered] == ["google/gemini-2.5-pro"]
