@@ -109,7 +109,7 @@ Do NOT create your own coordination frameworks or agent patterns.
   - Model selection by task:
     - **Fast tasks**: `google/gemini-2.5-flash` or `kimi-for-coding/k2p5`
     - **Complex coding**: `openai/gpt-5.3-codex` or `openai/gpt-5.2-codex`
-    - **Documentation**: `openai/gpt-5.2` or `google/gemini-2.5-pro`
+    - **General tasks**: `openai/gpt-5.2` or `google/gemini-2.5-pro`
     - **No special auth**: `kimi-for-coding/k2p5` or `github-copilot/*`
   - `reasoning_effort`: "none", "low", "medium", "high", "xhigh" — guides auto-selection.
   - `prefer_speed=True`: Prefer faster models over more capable ones.
@@ -256,6 +256,8 @@ def spawn_teammate_tool(
     Tested working models:
     - OpenAI: openai/gpt-5.2, openai/gpt-5.3-codex, openai/gpt-5.2-codex, openai/gpt-5.1-codex
     - Google: google/gemini-2.5-flash, google/gemini-2.5-pro, google/gemini-3-flash-preview
+    - Kimi: kimi-for-coding/k2p5, kimi-for-coding/kimi-k2-thinking
+    - Copilot: github-copilot/gpt-5.2, github-copilot/claude-sonnet-4.5
 
     Use `reasoning_effort` and `prefer_speed` to guide automatic model selection.
 

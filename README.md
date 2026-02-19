@@ -2,7 +2,7 @@
 
 # opencode-teams
 
-MCP server for orchestrating OpenCode agent teams with Kimi K2.5.
+MCP server for orchestrating OpenCode agent teams.
 
 </div>
 
@@ -14,7 +14,7 @@ https://github.com/user-attachments/assets/531ada0a-6c36-45cd-8144-a092bb9f9a19
 
 ## About
 
-This MCP server implements a multi-agent coordination protocol for [OpenCode](https://opencode.ai) + Kimi K2.5. Multiple OpenCode instances coordinate as a team with shared task lists, inter-agent messaging, and tmux-based or desktop app spawning.
+This MCP server implements a multi-agent coordination protocol for [OpenCode](https://opencode.ai). Multiple OpenCode instances coordinate as a team with shared task lists, inter-agent messaging, and tmux-based or desktop app spawning.
 
 The protocol is exposed as a standalone [MCP](https://modelcontextprotocol.io/) server, making it available to any MCP client that speaks MCP. PRs are welcome.
 
@@ -135,47 +135,39 @@ The following models have been tested and verified to work with `spawn_teammate`
 - `openai/gpt-5.2-codex` - Advanced coding model
 - `openai/gpt-5.1-codex` - Optimized for agentic coding
 
-**Note:** Codex models require ChatGPT Plus/Pro subscription. Standard API models like `gpt-5.1`, `gpt-5`, `gpt-5-mini/nano` do NOT work - use the Codex variants instead.
+**Note:** Codex models require ChatGPT Plus/Pro subscription.
 
-### Google Models (CLI/Local)
+### Google Models
 **Working:**
-- `google/gemini-2.5-flash` - Fast, efficient
-- `google/gemini-2.5-pro` - Most capable Gemini model
-- `google/gemini-3-flash-preview` - Latest flash model (preview)
-- `google/gemini-3-pro-preview` - Latest pro model (preview)
-- `google/gemini-3-pro-low` - Pro model with low reasoning effort
-- `google/gemini-3-pro-high` - Pro model with high reasoning effort
-
-**Note:** 
-- Gemini 2.5 models work with simple names
-- Gemini 3.x models require `-preview` suffix OR reasoning effort suffix (`-low`, `-medium`, `-high`)
-- All `antigravity-*` variants are deprecated
+- `google/gemini-2.5-flash` - Fast, efficient (1M context)
+- `google/gemini-2.5-pro` - Most capable Gemini model (1M context)
+- `google/gemini-3-flash-preview` - Latest flash model
+- `google/gemini-3-pro-preview` - Latest pro model
 
 ### Kimi for Coding Models
 **Working:**
 - `kimi-for-coding/k2p5` - Kimi K2.5 for coding tasks
 - `kimi-for-coding/kimi-k2-thinking` - Kimi K2 with thinking capabilities
 
-**Note:** These models are optimized specifically for coding tasks and work without special authentication beyond standard OpenCode setup.
+**Note:** These models work without special authentication beyond standard OpenCode setup.
 
 ### GitHub Copilot Models
 **Working:**
 - `github-copilot/gpt-5.2` - GPT 5.2 via Copilot
-- `github-copilot/gpt-5.1` - GPT 5.1 via Copilot
-- `github-copilot/gpt-5.1-codex` - Codex via Copilot
+- `github-copilot/gpt-5.2-codex` - Codex via Copilot
 - `github-copilot/claude-sonnet-4.5` - Claude Sonnet 4.5 via Copilot
 - `github-copilot/claude-opus-4.5` - Claude Opus 4.5 via Copilot
 - `github-copilot/gemini-2.5-pro` - Gemini 2.5 Pro via Copilot
-- `github-copilot/gemini-3-flash-preview` - Gemini 3 Flash via Copilot
 
-**Note:** Requires GitHub Copilot subscription. These models provide access to OpenAI, Anthropic, and Google models through your Copilot subscription.
+**Note:** Requires GitHub Copilot subscription.
 
 ### Model Name Format
 Always use the full `provider/model` format:
 - ✅ `openai/gpt-5.2`
+- ✅ `openai/gpt-5.3-codex`
 - ✅ `google/gemini-2.5-flash`
+- ✅ `kimi-for-coding/k2p5`
 - ❌ `gpt-5.2` (missing provider prefix)
-- ❌ `gpt-5.2-medium` (invalid suffix - reasoning effort is separate)
 
 ### Discovering Available Models
 Use the `list_available_models()` tool to see which models are configured in your OpenCode setup:

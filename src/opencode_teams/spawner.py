@@ -759,7 +759,7 @@ def translate_model(
 
     Returns:
         Full provider/model string (e.g., "openai/gpt-5.2", "openai/gpt-5.3-codex",
-        "google/gemini-2.5-flash"). See README.md for tested working models.
+        "google/gemini-2.5-flash", "kimi-for-coding/k2p5"). Use list_available_models() to see current options.
     """
     from opencode_teams.model_discovery import discover_models, resolve_model_string
     from opencode_teams.models import ModelPreference

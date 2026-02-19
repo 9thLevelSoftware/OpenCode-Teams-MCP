@@ -27,7 +27,7 @@ def generate_agent_config(
         name: Agent name
         team_name: Team name
         color: Agent color from COLOR_PALETTE
-        model: Model string (e.g., "moonshot-ai/kimi-k2.5")
+        model: Model string (e.g., "openai/gpt-5.2", "moonshotai/kimi-k2.5")
         role_instructions: Optional role-specific instructions from a template.
             Injected between Identity and Communication Protocol sections.
         custom_instructions: Optional user-provided instructions per spawn.
@@ -72,16 +72,19 @@ def generate_agent_config(
     body_parts: list[str] = []
 
     # Section 1: Agent Identity
-    body_parts.append(textwrap.dedent(f"""\
+    body_parts.append(
+        textwrap.dedent(f"""\
         # Agent Identity
 
         You are **{name}**, a member of team **{team_name}**.
 
         - Agent ID: `{agent_id}`
-        - Color: {color}"""))
+        - Color: {color}""")
+    )
 
     # Section 2: Available MCP Tools
-    body_parts.append(textwrap.dedent(f"""\
+    body_parts.append(
+        textwrap.dedent(f"""\
         # Available MCP Tools
 
         You MUST use these `opencode-teams_*` MCP tools for all team coordination.
@@ -105,7 +108,8 @@ def generate_agent_config(
         **Lifecycle:**
         - `opencode-teams_check_agent_health` — check health of a single agent
         - `opencode-teams_check_all_agents_health` — check health of all agents
-        - `opencode-teams_process_shutdown_approved` — acknowledge shutdown"""))
+        - `opencode-teams_process_shutdown_approved` — acknowledge shutdown""")
+    )
 
     # Section 3: Role instructions (from template, if provided)
     if role_instructions:
@@ -113,12 +117,11 @@ def generate_agent_config(
 
     # Section 4: Custom instructions (user per-spawn customization, if provided)
     if custom_instructions:
-        body_parts.append(
-            f"# Additional Instructions\n\n{custom_instructions.strip()}"
-        )
+        body_parts.append(f"# Additional Instructions\n\n{custom_instructions.strip()}")
 
     # Section 5: Workflow
-    body_parts.append(textwrap.dedent(f"""\
+    body_parts.append(
+        textwrap.dedent(f"""\
         # Workflow
 
         Follow this loop while working:
@@ -127,23 +130,28 @@ def generate_agent_config(
         2. **Check tasks** — call `opencode-teams_task_list(team_name="{team_name}")` to find available tasks. Claim one with `opencode-teams_task_update(team_name="{team_name}", task_id="<id>", status="in_progress", owner="{name}")`.
         3. **Do the work** — use your tools to complete the task.
         4. **Report progress** — send updates to team-lead via `opencode-teams_send_message(team_name="{team_name}", type="message", recipient="team-lead", content="<update>", summary="<short>", sender="{name}")`.
-        5. **Mark done** — call `opencode-teams_task_update(team_name="{team_name}", task_id="<id>", status="completed", owner="{name}")` when finished."""))
+        5. **Mark done** — call `opencode-teams_task_update(team_name="{team_name}", task_id="<id>", status="completed", owner="{name}")` when finished.""")
+    )
 
     # Section 6: Important Rules
-    body_parts.append(textwrap.dedent("""\
+    body_parts.append(
+        textwrap.dedent("""\
         # Important Rules
 
         - Use `opencode-teams_*` MCP tools for ALL team communication and task management
         - Do NOT create your own coordination systems, parallel agent frameworks, or orchestration patterns
         - Do NOT use slash commands or skills from other projects for team coordination
         - Focus on your assigned task — report to team-lead when done or blocked
-        - When uncertain, ask team-lead via `opencode-teams_send_message` rather than improvising"""))
+        - When uncertain, ask team-lead via `opencode-teams_send_message` rather than improvising""")
+    )
 
     # Section 7: Shutdown Protocol
-    body_parts.append(textwrap.dedent("""\
+    body_parts.append(
+        textwrap.dedent("""\
         # Shutdown Protocol
 
-        When you receive a `shutdown_request` message, acknowledge it and prepare to exit gracefully."""))
+        When you receive a `shutdown_request` message, acknowledge it and prepare to exit gracefully.""")
+    )
 
     body = "\n\n".join(body_parts)
 

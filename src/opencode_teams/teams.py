@@ -40,14 +40,18 @@ def create_team(
     name: str,
     session_id: str,
     description: str = "",
-    lead_model: str = "moonshot-ai/kimi-k2.5",
+    lead_model: str = "moonshotai/kimi-k2.5",
     base_dir: Path | None = None,
     project_dir: Path | None = None,
 ) -> TeamCreateResult:
     if not _VALID_NAME_RE.match(name):
-        raise ValueError(f"Invalid team name: {name!r}. Use only letters, numbers, hyphens, underscores.")
+        raise ValueError(
+            f"Invalid team name: {name!r}. Use only letters, numbers, hyphens, underscores."
+        )
     if len(name) > 64:
-        raise ValueError(f"Team name too long ({len(name)} chars, max 64): {name[:20]!r}...")
+        raise ValueError(
+            f"Team name too long ({len(name)} chars, max 64): {name[:20]!r}..."
+        )
 
     teams_dir = _teams_dir(base_dir)
     tasks_dir = _tasks_dir(base_dir)
@@ -153,7 +157,9 @@ def get_project_dir(team_name: str, base_dir: Path | None = None) -> Path:
     return Path.cwd()
 
 
-def remove_member(team_name: str, agent_name: str, base_dir: Path | None = None) -> None:
+def remove_member(
+    team_name: str, agent_name: str, base_dir: Path | None = None
+) -> None:
     if agent_name == "team-lead":
         raise ValueError("Cannot remove team-lead from team")
     config = read_config(team_name, base_dir=base_dir)
@@ -163,6 +169,7 @@ def remove_member(team_name: str, agent_name: str, base_dir: Path | None = None)
     # Best-effort cleanup of agent config file in the target project
     try:
         from opencode_teams.config_gen import cleanup_agent_config
+
         project = Path(config.project_dir) if config.project_dir else Path.cwd()
         cleanup_agent_config(project, agent_name)
     except Exception:

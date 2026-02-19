@@ -285,7 +285,7 @@ def resolve_model_string(
 
     Returns:
         Full provider/model string (e.g., "openai/gpt-5.2", "openai/gpt-5.3-codex",
-        "google/gemini-2.5-flash"). See README.md for tested working models.
+        "google/gemini-2.5-flash", "kimi-for-coding/k2p5").
 
     Raises:
         ValueError: If model cannot be resolved and no fallback is available.
