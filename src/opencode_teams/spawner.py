@@ -20,7 +20,12 @@ from opencode_teams.config_gen import (
     write_agent_config,
     ensure_opencode_json,
 )
-from opencode_teams.models import AgentHealthStatus, COLOR_PALETTE, InboxMessage, TeammateMember
+from opencode_teams.models import (
+    AgentHealthStatus,
+    COLOR_PALETTE,
+    InboxMessage,
+    TeammateMember,
+)
 from opencode_teams.teams import _VALID_NAME_RE
 
 
@@ -48,11 +53,16 @@ DESKTOP_BINARY_ENV_VAR = "OPENCODE_DESKTOP_BINARY"
 DESKTOP_PATHS: dict[str, list[str]] = {
     "darwin": [
         "/Applications/OpenCode Desktop.app/Contents/MacOS/OpenCode Desktop",
-        str(Path.home() / "Applications/OpenCode Desktop.app/Contents/MacOS/OpenCode Desktop"),
+        str(
+            Path.home()
+            / "Applications/OpenCode Desktop.app/Contents/MacOS/OpenCode Desktop"
+        ),
     ],
     "win32": [
         str(Path.home() / "AppData/Local/OpenCode/OpenCode.exe"),
-        str(Path.home() / "AppData/Local/Programs/opencode-desktop/opencode-desktop.exe"),
+        str(
+            Path.home() / "AppData/Local/Programs/opencode-desktop/opencode-desktop.exe"
+        ),
         str(Path.home() / "AppData/Local/opencode-desktop/opencode-desktop.exe"),
     ],
     "linux": [
@@ -119,9 +129,12 @@ def spawn_teammate(
     plan_mode_required: bool = False,
     base_dir: Path | None = None,
     project_dir: Path | None = None,
+    auto_close: bool = True,
 ) -> TeammateMember:
     if not _VALID_NAME_RE.match(name):
-        raise ValueError(f"Invalid agent name: {name!r}. Use only letters, numbers, hyphens, underscores.")
+        raise ValueError(
+            f"Invalid agent name: {name!r}. Use only letters, numbers, hyphens, underscores."
+        )
     if len(name) > 64:
         raise ValueError(f"Agent name too long ({len(name)} chars, max 64)")
     if name == "team-lead":
@@ -177,7 +190,9 @@ def spawn_teammate(
 
         if backend_type == "desktop":
             if not desktop_binary:
-                raise ValueError("desktop_binary is required when backend_type='desktop'")
+                raise ValueError(
+                    "desktop_binary is required when backend_type='desktop'"
+                )
             pid = launch_desktop_app(desktop_binary, member.cwd)
             config = teams.read_config(team_name, base_dir)
             for m in config.members:
@@ -188,7 +203,7 @@ def spawn_teammate(
             teams.write_config(team_name, config, base_dir)
             member.process_id = pid
         elif backend_type == "windows_terminal":
-            pid = spawn_windows_terminal(member, opencode_binary)
+            pid = spawn_windows_terminal(member, opencode_binary, auto_close=auto_close)
             config = teams.read_config(team_name, base_dir)
             for m in config.members:
                 if isinstance(m, TeammateMember) and m.name == name:
@@ -237,6 +252,7 @@ def build_windows_terminal_command(
     member: TeammateMember,
     opencode_binary: str,
     timeout_seconds: int = SPAWN_TIMEOUT_SECONDS,
+    auto_close: bool = True,
 ) -> list[str]:
     """Build the command to run an OpenCode agent in a new Windows terminal.
 
@@ -246,6 +262,8 @@ def build_windows_terminal_command(
         member: The teammate member with name, model, prompt, and cwd.
         opencode_binary: Path to the opencode binary.
         timeout_seconds: Maximum seconds before the process is killed (default: 300).
+        auto_close: If True, window closes automatically when agent exits.
+                   If False, waits for key press (useful for debugging).
 
     Returns:
         Command list for subprocess.Popen.
@@ -255,31 +273,37 @@ def build_windows_terminal_command(
     escaped_cwd = member.cwd.replace("'", "''")
     escaped_binary = opencode_binary.replace("'", "''")
 
-    # PowerShell script that:
-    # 1. Changes to the working directory
-    # 2. Runs opencode directly (not via Start-Process)
-    # 3. Always keeps window open for debugging
-    ps_script = (
-        "$ErrorActionPreference = 'Continue'\n"
-        f"Set-Location -Path '{escaped_cwd}'\n"
-        f"$title = '[OpenCode] {member.name}'\n"
-        "$host.UI.RawUI.WindowTitle = $title\n"
-        "Write-Host '========================================' -ForegroundColor Cyan\n"
-        f"Write-Host 'OpenCode Agent: {member.name}' -ForegroundColor Cyan\n"
-        "Write-Host '========================================' -ForegroundColor Cyan\n"
-        f"Write-Host 'Model: {member.model}' -ForegroundColor Gray\n"
-        f"Write-Host 'Working directory: {escaped_cwd}' -ForegroundColor Gray\n"
-        "Write-Host ''\n"
-        "Write-Host 'Starting opencode run...' -ForegroundColor Yellow\n"
-        "Write-Host ''\n"
-        f"& '{escaped_binary}' run --agent '{member.name}' --model '{member.model}' '{escaped_prompt}'\n"
-        "$exitCode = $LASTEXITCODE\n"
-        "Write-Host ''\n"
-        "Write-Host '========================================' -ForegroundColor Yellow\n"
-        "Write-Host ('Agent exited with code: ' + $exitCode) -ForegroundColor Yellow\n"
-        "Write-Host 'Press any key to close this window...' -ForegroundColor Gray\n"
-        "$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')"
-    )
+    # Build the PowerShell script
+    ps_script_lines = [
+        "$ErrorActionPreference = 'Continue'",
+        f"Set-Location -Path '{escaped_cwd}'",
+        f"$title = '[OpenCode] {member.name}'",
+        "$host.UI.RawUI.WindowTitle = $title",
+        "Write-Host '========================================' -ForegroundColor Cyan",
+        f"Write-Host 'OpenCode Agent: {member.name}' -ForegroundColor Cyan",
+        "Write-Host '========================================' -ForegroundColor Cyan",
+        f"Write-Host 'Model: {member.model}' -ForegroundColor Gray",
+        f"Write-Host 'Working directory: {escaped_cwd}' -ForegroundColor Gray",
+        "Write-Host ''",
+        "Write-Host 'Starting opencode run...' -ForegroundColor Yellow",
+        "Write-Host ''",
+        f"& '{escaped_binary}' run --agent '{member.name}' --model '{member.model}' '{escaped_prompt}'",
+        "$exitCode = $LASTEXITCODE",
+        "Write-Host ''",
+        "Write-Host '========================================' -ForegroundColor Yellow",
+        "Write-Host ('Agent exited with code: ' + $exitCode) -ForegroundColor Yellow",
+    ]
+
+    # Only wait for key press if auto_close is False
+    if not auto_close:
+        ps_script_lines.extend(
+            [
+                "Write-Host 'Press any key to close this window...' -ForegroundColor Gray",
+                "$null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')",
+            ]
+        )
+
+    ps_script = "\n".join(ps_script_lines)
 
     # Encode as UTF-16LE → Base64 to bypass all command-line escaping issues
     encoded = base64.b64encode(ps_script.encode("utf-16-le")).decode("ascii")
@@ -287,8 +311,10 @@ def build_windows_terminal_command(
     return [
         "powershell.exe",
         "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-EncodedCommand", encoded,
+        "-ExecutionPolicy",
+        "Bypass",
+        "-EncodedCommand",
+        encoded,
     ]
 
 
@@ -296,6 +322,7 @@ def spawn_windows_terminal(
     member: TeammateMember,
     opencode_binary: str,
     timeout_seconds: int = SPAWN_TIMEOUT_SECONDS,
+    auto_close: bool = True,
 ) -> int:
     """Spawn an OpenCode agent in a new Windows terminal window.
 
@@ -305,11 +332,14 @@ def spawn_windows_terminal(
         member: The teammate member with name, model, prompt, and cwd.
         opencode_binary: Path to the opencode binary.
         timeout_seconds: Maximum seconds before the process is killed.
+        auto_close: If True, window closes automatically when agent exits.
 
     Returns:
         PID of the spawned process (note: this is the PowerShell process PID).
     """
-    cmd = build_windows_terminal_command(member, opencode_binary, timeout_seconds)
+    cmd = build_windows_terminal_command(
+        member, opencode_binary, timeout_seconds, auto_close
+    )
 
     # Use subprocess.Popen with CREATE_NEW_CONSOLE to spawn in a new visible window.
     # Do NOT redirect stdin/stdout/stderr — with CREATE_NEW_CONSOLE, the new console
@@ -406,7 +436,9 @@ def load_health_state(team_name: str, base_dir: Path | None = None) -> dict:
     return json.loads(health_path.read_text())
 
 
-def save_health_state(team_name: str, state: dict, base_dir: Path | None = None) -> None:
+def save_health_state(
+    team_name: str, state: dict, base_dir: Path | None = None
+) -> None:
     """Persist health state for a team.
 
     Args:
@@ -446,7 +478,9 @@ def check_single_agent_health(
     # Desktop and windows_terminal backends: process-based liveness only, no hung detection
     if member.backend_type in ("desktop", "windows_terminal"):
         pid = member.process_id
-        backend_label = "Desktop" if member.backend_type == "desktop" else "Windows terminal"
+        backend_label = (
+            "Desktop" if member.backend_type == "desktop" else "Windows terminal"
+        )
         if not check_process_alive(pid):
             return AgentHealthStatus(
                 agent_name=member.name,
@@ -535,8 +569,7 @@ def discover_opencode_binary() -> str:
     path = shutil.which("opencode")
     if path is None:
         raise FileNotFoundError(
-            "Could not find 'opencode' binary on PATH. "
-            "Install from https://opencode.ai"
+            "Could not find 'opencode' binary on PATH. Install from https://opencode.ai"
         )
     validate_opencode_version(path)
     return path
@@ -725,7 +758,8 @@ def translate_model(
         preference: Selection preferences (used when model_alias="auto").
 
     Returns:
-        Full provider/model string (e.g., "openai/gpt-5.2-medium").
+        Full provider/model string (e.g., "openai/gpt-5.2", "openai/gpt-5.3-codex",
+        "google/gemini-2.5-flash"). See README.md for tested working models.
     """
     from opencode_teams.model_discovery import discover_models, resolve_model_string
     from opencode_teams.models import ModelPreference

@@ -44,6 +44,7 @@ from opencode_teams.spawner import (
 @lifespan
 async def app_lifespan(server):
     import logging
+
     logger = logging.getLogger("opencode-teams")
 
     _log_activity("SERVER STARTING - lifespan begin")
@@ -103,10 +104,16 @@ Do NOT create your own coordination frameworks or agent patterns.
 - `list_available_models(provider?, reasoning_effort?)` — List available models from OpenCode config.
 
 ### Agent Spawning
-- `spawn_teammate(team_name, name, prompt, instructions, model, reasoning_effort, prefer_speed, backend)` — Spawn agent.
+- `spawn_teammate(team_name, name, prompt, instructions, model, reasoning_effort, prefer_speed, backend, auto_close)` — Spawn agent.
   - `model="auto"` (default): Selects best model based on preferences.
+  - Model selection by task:
+    - **Fast tasks**: `google/gemini-2.5-flash` or `kimi-for-coding/k2p5`
+    - **Complex coding**: `openai/gpt-5.3-codex` or `openai/gpt-5.2-codex`
+    - **Documentation**: `openai/gpt-5.2` or `google/gemini-2.5-pro`
+    - **No special auth**: `kimi-for-coding/k2p5` or `github-copilot/*`
   - `reasoning_effort`: "none", "low", "medium", "high", "xhigh" — guides auto-selection.
   - `prefer_speed=True`: Prefer faster models over more capable ones.
+  - `auto_close=True` (default): Window closes automatically when agent exits (Windows terminal only).
 - `force_kill_teammate(team_name, agent_name)` — Force-stop an agent.
 - `check_agent_health(team_name, agent_name)` — Check if agent is alive/dead/hung.
 - `check_all_agents_health(team_name)` — Check health of all agents.
@@ -200,9 +207,13 @@ def team_create(
     (letters, numbers, hyphens, underscores)."""
     ls = _get_lifespan(ctx)
     if ls.get("active_team"):
-        raise ToolError(f"Session already has active team: {ls['active_team']}. One team per session.")
+        raise ToolError(
+            f"Session already has active team: {ls['active_team']}. One team per session."
+        )
     result = teams.create_team(
-        name=team_name, session_id=ls["session_id"], description=description,
+        name=team_name,
+        session_id=ls["session_id"],
+        description=description,
         project_dir=Path.cwd(),
     )
     ls["active_team"] = team_name
@@ -229,17 +240,22 @@ def spawn_teammate_tool(
     ctx: Context,
     instructions: str = "",  # Task-specific system prompt instructions for this agent
     model: str = "auto",  # "auto", model_id, or full "provider/model" string
-    reasoning_effort: str | None = None,  # Preference: "none", "low", "medium", "high", "xhigh"
+    reasoning_effort: str
+    | None = None,  # Preference: "none", "low", "medium", "high", "xhigh"
     prefer_speed: bool = False,  # Prefer faster models over more capable ones
     plan_mode_required: bool = False,
     backend: str = "auto",  # "auto", "tmux", "windows_terminal", or "desktop"
+    auto_close: bool = True,  # Close window automatically when agent exits (Windows terminal only)
 ) -> dict:
     """Spawn a new OpenCode teammate with dynamically generated configuration.
 
     Model selection:
     - 'auto' (default): Automatically selects best available model based on preferences.
-    - model_id: Use a specific model (e.g., "gpt-5.2-medium", "gemini-3-flash").
-    - provider/model: Full model string (e.g., "openai/gpt-5.2-high").
+    - provider/model: Full model string (e.g., "openai/gpt-5.2", "openai/gpt-5.3-codex", "google/gemini-2.5-flash").
+
+    Tested working models:
+    - OpenAI: openai/gpt-5.2, openai/gpt-5.3-codex, openai/gpt-5.2-codex, openai/gpt-5.1-codex
+    - Google: google/gemini-2.5-flash, google/gemini-2.5-pro, google/gemini-3-flash-preview
 
     Use `reasoning_effort` and `prefer_speed` to guide automatic model selection.
 
@@ -249,12 +265,18 @@ def spawn_teammate_tool(
     - 'windows_terminal': Spawn in a new PowerShell window (Windows only)
     - 'desktop': Launch the OpenCode desktop app (GUI, requires manual interaction)
 
+    Window behavior:
+    - `auto_close=True` (default): Window closes automatically when agent finishes
+    - `auto_close=False`: Window stays open waiting for key press (useful for debugging)
+
     Agent configs are created on spawn and purged on shutdown/kill.
     Use `instructions` to tailor the agent's role and behavior for the specific task.
 
     The teammate receives its initial prompt via inbox and begins working
     autonomously. Names must be unique within the team."""
-    _log_activity(f"TOOL CALL: spawn_teammate team={team_name} name={name} model={model}")
+    _log_activity(
+        f"TOOL CALL: spawn_teammate team={team_name} name={name} model={model}"
+    )
     ls = _get_lifespan(ctx)
     opencode_binary = ls.get("opencode_binary")
     if opencode_binary is None:
@@ -330,6 +352,7 @@ def spawn_teammate_tool(
         desktop_binary=desktop_binary,
         plan_mode_required=plan_mode_required,
         project_dir=Path.cwd(),
+        auto_close=auto_close,
     )
     _log_activity(f"TOOL DONE: spawn_teammate agent_id={member.agent_id}")
     return SpawnResult(
@@ -342,7 +365,13 @@ def spawn_teammate_tool(
 @mcp.tool
 def send_message(
     team_name: str,
-    type: Literal["message", "broadcast", "shutdown_request", "shutdown_response", "plan_approval_response"],
+    type: Literal[
+        "message",
+        "broadcast",
+        "shutdown_request",
+        "shutdown_response",
+        "plan_approval_response",
+    ],
     recipient: str = "",
     content: str = "",
     summary: str = "",
@@ -367,14 +396,21 @@ def send_message(
         config = teams.read_config(team_name)
         member_names = {m.name for m in config.members}
         if recipient not in member_names:
-            raise ToolError(f"Recipient {recipient!r} is not a member of team {team_name!r}")
+            raise ToolError(
+                f"Recipient {recipient!r} is not a member of team {team_name!r}"
+            )
         target_color = None
         for m in config.members:
             if m.name == recipient and isinstance(m, TeammateMember):
                 target_color = m.color
                 break
         messaging.send_plain_message(
-            team_name, sender, recipient, content, summary=summary, color=target_color,
+            team_name,
+            sender,
+            recipient,
+            content,
+            summary=summary,
+            color=target_color,
         )
         return SendMessageResult(
             success=True,
@@ -396,7 +432,12 @@ def send_message(
         for m in config.members:
             if isinstance(m, TeammateMember):
                 messaging.send_plain_message(
-                    team_name, "team-lead", m.name, content, summary=summary, color=None,
+                    team_name,
+                    "team-lead",
+                    m.name,
+                    content,
+                    summary=summary,
+                    color=None,
                 )
                 count += 1
         return SendMessageResult(
@@ -412,7 +453,9 @@ def send_message(
         config = teams.read_config(team_name)
         member_names = {m.name for m in config.members}
         if recipient not in member_names:
-            raise ToolError(f"Recipient {recipient!r} is not a member of team {team_name!r}")
+            raise ToolError(
+                f"Recipient {recipient!r} is not a member of team {team_name!r}"
+            )
         req_id = messaging.send_shutdown_request(team_name, recipient, reason=content)
         return SendMessageResult(
             success=True,
@@ -445,7 +488,9 @@ def send_message(
             ).model_dump(exclude_none=True)
         else:
             messaging.send_plain_message(
-                team_name, sender, "team-lead",
+                team_name,
+                sender,
+                "team-lead",
                 content or "Shutdown rejected",
                 summary="shutdown_rejected",
             )
@@ -460,16 +505,22 @@ def send_message(
         config = teams.read_config(team_name)
         member_names = {m.name for m in config.members}
         if recipient not in member_names:
-            raise ToolError(f"Recipient {recipient!r} is not a member of team {team_name!r}")
+            raise ToolError(
+                f"Recipient {recipient!r} is not a member of team {team_name!r}"
+            )
         if approve:
             messaging.send_plain_message(
-                team_name, sender, recipient,
+                team_name,
+                sender,
+                recipient,
                 '{"type":"plan_approval","approved":true}',
                 summary="plan_approved",
             )
         else:
             messaging.send_plain_message(
-                team_name, sender, recipient,
+                team_name,
+                sender,
+                recipient,
                 content or "Plan rejected",
                 summary="plan_rejected",
             )
@@ -516,9 +567,15 @@ def task_update(
     Metadata keys are merged into existing metadata (set a key to null to delete it)."""
     try:
         task = tasks.update_task(
-            team_name, task_id,
-            status=status, owner=owner, subject=subject, description=description,
-            active_form=active_form, add_blocks=add_blocks, add_blocked_by=add_blocked_by,
+            team_name,
+            task_id,
+            status=status,
+            owner=owner,
+            subject=subject,
+            description=description,
+            active_form=active_form,
+            add_blocks=add_blocks,
+            add_blocked_by=add_blocked_by,
             metadata=metadata,
         )
     except FileNotFoundError:
@@ -559,7 +616,9 @@ def read_inbox(
 ) -> list[dict]:
     """Read messages from an agent's inbox. Returns all messages by default.
     Set unread_only=True to get only unprocessed messages."""
-    msgs = messaging.read_inbox(team_name, agent_name, unread_only=unread_only, mark_as_read=mark_as_read)
+    msgs = messaging.read_inbox(
+        team_name, agent_name, unread_only=unread_only, mark_as_read=mark_as_read
+    )
     return [m.model_dump(by_alias=True, exclude_none=True) for m in msgs]
 
 
@@ -610,13 +669,17 @@ async def poll_inbox(
     """Poll an agent's inbox for new unread messages, waiting up to timeout_ms.
     Returns unread messages and marks them as read. Convenience tool for MCP
     clients that cannot watch the filesystem."""
-    msgs = messaging.read_inbox(team_name, agent_name, unread_only=True, mark_as_read=True)
+    msgs = messaging.read_inbox(
+        team_name, agent_name, unread_only=True, mark_as_read=True
+    )
     if msgs:
         return [m.model_dump(by_alias=True, exclude_none=True) for m in msgs]
     deadline = time.time() + timeout_ms / 1000.0
     while time.time() < deadline:
         await asyncio.sleep(0.5)
-        msgs = messaging.read_inbox(team_name, agent_name, unread_only=True, mark_as_read=True)
+        msgs = messaging.read_inbox(
+            team_name, agent_name, unread_only=True, mark_as_read=True
+        )
         if msgs:
             return [m.model_dump(by_alias=True, exclude_none=True) for m in msgs]
     return []
@@ -756,9 +819,9 @@ def _log_crash(exc_type, exc_value, exc_tb):
     log_path = _get_crash_log_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as f:
-        f.write(f"\n{'='*60}\n")
+        f.write(f"\n{'=' * 60}\n")
         f.write(f"CRASH at {datetime.now().isoformat()}\n")
-        f.write(f"{'='*60}\n")
+        f.write(f"{'=' * 60}\n")
         traceback.print_exception(exc_type, exc_value, exc_tb, file=f)
         f.write("\n")
 
@@ -768,9 +831,9 @@ def _handle_async_exception(loop, context):
     log_path = _get_crash_log_path()
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a", encoding="utf-8") as f:
-        f.write(f"\n{'='*60}\n")
+        f.write(f"\n{'=' * 60}\n")
         f.write(f"ASYNC EXCEPTION at {datetime.now().isoformat()}\n")
-        f.write(f"{'='*60}\n")
+        f.write(f"{'=' * 60}\n")
         f.write(f"Message: {context.get('message', 'No message')}\n")
         if "exception" in context:
             f.write("Exception:\n")

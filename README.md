@@ -82,6 +82,32 @@ Or for local development:
 - **Tasks**: JSON task files under `~/.opencode-teams/tasks/<team>/`. Tasks have status tracking, ownership, and dependency management (`blocks`/`blockedBy`).
 - **Concurrency safety**: Atomic writes via `tempfile` + `os.replace` for config. File locks for inbox operations.
 
+## Window Management
+
+When spawning agents with `backend='windows_terminal'` (Windows), you can control window behavior:
+
+```python
+# Window closes automatically when agent finishes (default)
+spawn_teammate(
+    team_name="my-team",
+    name="worker-1",
+    prompt="Do some work...",
+    backend="windows_terminal",
+    auto_close=True
+)
+
+# Window stays open for debugging (shows exit code, waits for key press)
+spawn_teammate(
+    team_name="my-team",
+    name="worker-1",
+    prompt="Do some work...",
+    backend="windows_terminal",
+    auto_close=False
+)
+```
+
+**Note:** `auto_close` only affects Windows terminal backend. tmux panes are managed via `force_kill_teammate`, and desktop app windows must be closed manually.
+
 ## Storage layout
 
 ```
@@ -97,6 +123,99 @@ Or for local development:
     ├── 2.json
     └── .lock
 ```
+
+## Model Compatibility
+
+The following models have been tested and verified to work with `spawn_teammate`:
+
+### OpenAI Models (OAuth Required)
+**Working:**
+- `openai/gpt-5.2` - General agentic model
+- `openai/gpt-5.3-codex` - Most capable agentic coding model
+- `openai/gpt-5.2-codex` - Advanced coding model
+- `openai/gpt-5.1-codex` - Optimized for agentic coding
+
+**Note:** Codex models require ChatGPT Plus/Pro subscription. Standard API models like `gpt-5.1`, `gpt-5`, `gpt-5-mini/nano` do NOT work - use the Codex variants instead.
+
+### Google Models (CLI/Local)
+**Working:**
+- `google/gemini-2.5-flash` - Fast, efficient
+- `google/gemini-2.5-pro` - Most capable Gemini model
+- `google/gemini-3-flash-preview` - Latest flash model (preview)
+- `google/gemini-3-pro-preview` - Latest pro model (preview)
+- `google/gemini-3-pro-low` - Pro model with low reasoning effort
+- `google/gemini-3-pro-high` - Pro model with high reasoning effort
+
+**Note:** 
+- Gemini 2.5 models work with simple names
+- Gemini 3.x models require `-preview` suffix OR reasoning effort suffix (`-low`, `-medium`, `-high`)
+- All `antigravity-*` variants are deprecated
+
+### Kimi for Coding Models
+**Working:**
+- `kimi-for-coding/k2p5` - Kimi K2.5 for coding tasks
+- `kimi-for-coding/kimi-k2-thinking` - Kimi K2 with thinking capabilities
+
+**Note:** These models are optimized specifically for coding tasks and work without special authentication beyond standard OpenCode setup.
+
+### GitHub Copilot Models
+**Working:**
+- `github-copilot/gpt-5.2` - GPT 5.2 via Copilot
+- `github-copilot/gpt-5.1` - GPT 5.1 via Copilot
+- `github-copilot/gpt-5.1-codex` - Codex via Copilot
+- `github-copilot/claude-sonnet-4.5` - Claude Sonnet 4.5 via Copilot
+- `github-copilot/claude-opus-4.5` - Claude Opus 4.5 via Copilot
+- `github-copilot/gemini-2.5-pro` - Gemini 2.5 Pro via Copilot
+- `github-copilot/gemini-3-flash-preview` - Gemini 3 Flash via Copilot
+
+**Note:** Requires GitHub Copilot subscription. These models provide access to OpenAI, Anthropic, and Google models through your Copilot subscription.
+
+### Model Name Format
+Always use the full `provider/model` format:
+- ✅ `openai/gpt-5.2`
+- ✅ `google/gemini-2.5-flash`
+- ❌ `gpt-5.2` (missing provider prefix)
+- ❌ `gpt-5.2-medium` (invalid suffix - reasoning effort is separate)
+
+### Discovering Available Models
+Use the `list_available_models()` tool to see which models are configured in your OpenCode setup:
+```python
+# List all available models
+list_available_models()
+
+# Filter by provider
+list_available_models(provider="openai")
+list_available_models(provider="google")
+
+# Filter by reasoning effort
+list_available_models(reasoning_effort="high")
+```
+
+This returns models from your `~/.config/opencode/opencode.json` configuration. If a model isn't listed there, it won't be available for spawning agents.
+
+### Auto-Selection
+Use `model="auto"` with `reasoning_effort` and `prefer_speed` to let the system select the best model:
+```json
+{
+  "model": "auto",
+  "reasoning_effort": "medium",
+  "prefer_speed": false
+}
+```
+
+### Quick Model Selection Guide
+
+| Task Type | Recommended Model | Why |
+|-----------|------------------|-----|
+| **Fast tasks** | `google/gemini-2.5-flash` | Fastest response |
+| **Complex coding** | `openai/gpt-5.3-codex` | Best coding + reasoning |
+| **General coding** | `kimi-for-coding/k2p5` | No special auth needed |
+| **Documentation** | `openai/gpt-5.2` | Strong writing capabilities |
+| **Research** | `openai/gpt-5.1-codex-max` | Long-horizon analysis |
+| **Budget option** | `github-copilot/gpt-5.2` | Included in Copilot |
+| **No auth hassle** | `kimi-for-coding/k2p5` | Works out of the box |
+
+See [MODELS.md](./MODELS.md) for detailed task-based recommendations.
 
 ## License
 

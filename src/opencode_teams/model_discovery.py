@@ -3,6 +3,7 @@
 Discovers models from OpenCode configuration files and provides preference-based
 selection for spawning agents with appropriate models.
 """
+
 from __future__ import annotations
 
 import json
@@ -64,7 +65,9 @@ def load_opencode_config(project_dir: Path | None = None) -> dict[str, Any]:
             # Deep merge providers
             if "provider" in project_config:
                 merged.setdefault("provider", {})
-                for provider_name, provider_config in project_config["provider"].items():
+                for provider_name, provider_config in project_config[
+                    "provider"
+                ].items():
                     if provider_name in merged["provider"]:
                         # Merge models
                         merged["provider"][provider_name].setdefault("models", {})
@@ -89,7 +92,7 @@ def load_opencode_config(project_dir: Path | None = None) -> dict[str, Any]:
 
 
 def _parse_reasoning_effort(
-    options: dict[str, Any] | None
+    options: dict[str, Any] | None,
 ) -> Literal["none", "low", "medium", "high", "xhigh"] | None:
     """Extract reasoning effort from model/provider options."""
     if not options:
@@ -145,22 +148,26 @@ def discover_models(config: dict[str, Any] | None = None) -> list[ModelInfo]:
 
             # Extract reasoning effort (model-level overrides provider-level)
             model_options = model_config.get("options", {})
-            reasoning_effort = _parse_reasoning_effort(model_options) or provider_reasoning
+            reasoning_effort = (
+                _parse_reasoning_effort(model_options) or provider_reasoning
+            )
 
             # Build full model string
             full_model_string = f"{provider_name}/{model_id}"
 
-            models.append(ModelInfo(
-                provider=provider_name,
-                model_id=model_id,
-                name=model_config.get("name", model_id),
-                full_model_string=full_model_string,
-                context_window=context_window,
-                max_output=max_output,
-                input_modalities=input_modalities,
-                output_modalities=output_modalities,
-                reasoning_effort=reasoning_effort,
-            ))
+            models.append(
+                ModelInfo(
+                    provider=provider_name,
+                    model_id=model_id,
+                    name=model_config.get("name", model_id),
+                    full_model_string=full_model_string,
+                    context_window=context_window,
+                    max_output=max_output,
+                    input_modalities=input_modalities,
+                    output_modalities=output_modalities,
+                    reasoning_effort=reasoning_effort,
+                )
+            )
 
     return models
 
@@ -190,11 +197,16 @@ def select_model_by_preference(
 
     for model in models:
         # Hard constraints
-        if preference.min_context_window and model.context_window < preference.min_context_window:
+        if (
+            preference.min_context_window
+            and model.context_window < preference.min_context_window
+        ):
             continue
 
         if preference.required_modalities:
-            if not all(m in model.input_modalities for m in preference.required_modalities):
+            if not all(
+                m in model.input_modalities for m in preference.required_modalities
+            ):
                 continue
 
         if preference.provider and model.provider != preference.provider:
@@ -222,12 +234,14 @@ def select_model_by_preference(
         if model.context_window > 0:
             # 128k = ~17 log2, 1M = ~20 log2
             import math
+
             context_score = min(50, int(math.log2(model.context_window) * 2.5))
             score += context_score
 
         # Max output bonus (smaller weight)
         if model.max_output > 0:
             import math
+
             output_score = min(20, int(math.log2(model.max_output) * 1.5))
             score += output_score
 
@@ -270,7 +284,8 @@ def resolve_model_string(
         preference: Selection preferences (used when model="auto").
 
     Returns:
-        Full provider/model string (e.g., "openai/gpt-5.2-medium").
+        Full provider/model string (e.g., "openai/gpt-5.2", "openai/gpt-5.3-codex",
+        "google/gemini-2.5-flash"). See README.md for tested working models.
 
     Raises:
         ValueError: If model cannot be resolved and no fallback is available.
@@ -287,9 +302,7 @@ def resolve_model_string(
         # Fallback: first available model
         if models:
             return models[0].full_model_string
-        raise ValueError(
-            "No models available. Configure providers in opencode.json."
-        )
+        raise ValueError("No models available. Configure providers in opencode.json.")
 
     # Case 2: already full provider/model string
     if "/" in model:
